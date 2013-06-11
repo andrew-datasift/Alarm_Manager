@@ -12,7 +12,7 @@ public class HoltWinters_Alarm extends Alarm {
     public HoltWinters_Alarm(JSONObject thisalarm) throws Exception{
         GetCommonElements(thisalarm);
         
-        if (path.contains("$$")) throw new Exception("Holtwinters alarms cannot contain a wildcard in the path. Skipping alarm for " + path);;
+        if (path.contains("$$")) throw new Exception("Holtwinters alarms cannot contain a wildcard in the path. Skipping alarm for " + path);
         searchquery="&target=aliasSub(holtWintersAberration(" + path + "),\"^\",\"" + ID + "_\")";
         
         if (thisalarm.get("summary") == null) {
@@ -23,7 +23,7 @@ public class HoltWinters_Alarm extends Alarm {
         @Override
     public ZenossAlarmProperties processresponse(JSONObject dataset){
         String device = getdevicename( (String)dataset.get("target") );
-        Integer uniqueID = ID + device.hashCode();
+        String uniqueID = ID.toString() + "_" + device;
         ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,device,component,event_class,summary,uniqueID);
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
         if (datapoints.size() == 0) return zap;

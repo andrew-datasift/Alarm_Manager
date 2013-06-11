@@ -29,7 +29,7 @@ public class ROC_abs_Alarm extends Alarm {
     @Override
     public ZenossAlarmProperties processresponse(JSONObject dataset){
         String device = getdevicename( (String)dataset.get("target") );
-        Integer uniqueID = ID + device.hashCode();
+        String uniqueID = ID.toString() + "_" + device;
         ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,device,component,event_class,summary,uniqueID);
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
         if (datapoints.size() == 0) return zap;

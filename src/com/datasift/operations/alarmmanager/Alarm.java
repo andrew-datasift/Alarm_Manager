@@ -11,7 +11,8 @@ import org.json.simple.JSONArray;
  */
 
 public class Alarm {
-    Integer ID;
+    // These are all of the attribures which are defined in the config file for the alarm
+    String type;
     String description;
     String summary;
     String component;
@@ -19,12 +20,25 @@ public class Alarm {
     Integer prodState = 1000;
     Boolean greater_than;
     String path;
-    String searchquery;
     Integer triggerincrements;
     Integer clearincrements;
     Boolean active;
+    
+    // Search query is the graphite search query generated from the path.
+    String searchquery;
+    
+    // ID is a unique ID for this alarm which is a hash generated from the values above.
+    Integer ID;
+    
+    // Threshold multipler is used when the alarm manager has been configured to temporarily increase the threshold
+    // of an alarm for a specified time.
+    Double threshold_multiplier = 1.0;
     Boolean substitute_hostname=false;
+    
+    // timesList holds all of the time specific thresholds, if any.
     ArrayList<AlarmTime> timesList = new ArrayList<AlarmTime>();
+    
+    // The thresholds array holds the default (non-time specific) thresholds, if any.
     Double[] thresholds = new Double[6];
 
     /*
@@ -34,7 +48,6 @@ public class Alarm {
     
     public Alarm(){
         active = false;
-        
     }
    
     /*
@@ -57,6 +70,7 @@ public class Alarm {
         if (alarmconfig.get("component") == null) throw new Exception("\"Component\" value cannot be empty");
         path=(String)alarmconfig.get("path");
         component=(String)alarmconfig.get("component");
+        type = (String)alarmconfig.get("type");
         
         if (alarmconfig.get("summary") == null) summary = path;
                 else summary=(String)alarmconfig.get("summary");
@@ -170,35 +184,51 @@ public class Alarm {
      * This method always returns a clear (level 0), and should not be used. It is overridden in each of the child classes.
      */
     
-    /*
-     * TODO: Make sure no alarms are triggered if there are no thresholds for the current time and no defaults.
-     * 
-     * TODO: What happens if an alarm is triggered then the time changes to a period with no thresholds?
-     */
     
     public ZenossAlarmProperties processresponse(JSONObject dataset){
         System.out.println("processing graphite data on " + dataset.get("target"));
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
-        if (datapoints.size() == 0) return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID);
-        return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID);
+        return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID.toString());
+    }
+    
+    /*
+     * checkalarm is a wrapper method. This will be called in order to generate an alarm from a set of graphite data.
+     * This method will then perform any standard functions, such as checking the validity of the dataset, then call the
+     * processresponse method which will be unique for each alarm instance.
+     * 
+     * TODO: turn the no data alarm back on before putting into production
+     */
+    
+    public ZenossAlarmProperties checkalarm(JSONObject dataset){
+        String device = getdevicename( (String)dataset.get("target") );
+        //Integer uniqueID = ID + device.hashCode();
+        //if (checkfornodata(dataset)) return new ZenossAlarmProperties(3,prodState,"graphite_alarm_manager",component,event_class,"Graphite returned no data for alarm: \"" + summary + "\"",uniqueID);
+        if (checkfornodata(dataset)) System.out.println("Graphite returned no data for alarm: \"" + summary + "\"");
+        return processresponse(dataset);
     }
 
     /*
      * getcurrentseveritylevel is given a set of datapoints as returned by graphite. It returns the current alarm threshold for that
      * datapoint at that time. It takes no account of the number of repeat values needed to cause an alarm; that is handled elsewhere.
+     * 
+     * The value is multiplied (or divided in the case of a lower-than alarm) by the threshold_multipler. This is usually 1, but can be set to a higher
+     * value in order to temporarily increase an alarms threshold.
      */
     
     public Integer getcurrentseveritylevel(JSONArray datapoints, Double latestmeasurement){
         Double[] localthresholds = getthresholdsfortime(datapoints);
         for (int i=5; i>0; i--){
-           if ( greater_than && (localthresholds[i] != null) && (latestmeasurement > localthresholds[i]) ){
+           if ( greater_than && (localthresholds[i] != null) && (latestmeasurement >= (localthresholds[i] * threshold_multiplier)) ){
                return i;
-           } else if ( !greater_than && (localthresholds[i] != null) && (latestmeasurement < localthresholds[i]) ) {
+           } else if ( !greater_than && (localthresholds[i] != null) && (latestmeasurement <= (localthresholds[i] / threshold_multiplier)) ) {
                return i;
            }
         }
         
-        return 0;
+        if ( greater_than && (localthresholds[0] != null) && (latestmeasurement <= (localthresholds[0] * threshold_multiplier))) return 0;
+        if ( !greater_than && (localthresholds[0] != null) && (latestmeasurement >= (localthresholds[0] / threshold_multiplier))) return 0;
+        
+        return -1;
         
     }
     
@@ -254,6 +284,36 @@ public class Alarm {
       return "";  
     }
   
+    /*
+     * checkfornodata will return true if the first 10 values in the dataset are empty. If they are
+     * then the alarm manager will trigger a missing data alarm to notify that the data is missing from graphite
+     */
+    public Boolean checkfornodata(JSONObject dataset){
+        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
+        if (datapoints.size() == 0) return true;
+        
+        // If the dataset itself is smaller than 10 then use that
+
+        
+        for (int i=1; i<10; i++){
+            if (i > datapoints.size()) break;
+            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
+            if (currentdatapoint.get(0) != null){
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    @Override
+    public String toString(){
+        String s = "{\"ID\": \"" + ID + "\", \"component\": \"" + component + "\", \"type\": \"" + type + "\", \"event_class\":" + event_class + "\", \"metric_path\":" + path + ", \"threshold_multiplier\":" + threshold_multiplier + "}";
+        return s;
+    }
+    
+    public void set_multiplier(Double _mult){
+        threshold_multiplier = _mult;
+    }
 
     
 }

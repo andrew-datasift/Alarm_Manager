@@ -11,10 +11,10 @@ public class ZenossAlarmProperties {
     public String component;
     public String eventclass;
     public String summary;
-    public Integer ID;
+    public String ID;
     public String message;
     
-    public ZenossAlarmProperties(Integer _severity, Integer _prodState, String _device, String _component, String _eventclass, String _summary, Integer _ID){
+    public ZenossAlarmProperties(Integer _severity, Integer _prodState, String _device, String _component, String _eventclass, String _summary, String _ID){
         severity = _severity;
         prodState = _prodState;
         device = _device;
@@ -25,7 +25,7 @@ public class ZenossAlarmProperties {
         ID = _ID;
     }
     
-    public ZenossAlarmProperties(Integer _severity, Integer _prodState, String _device, String _component, String _eventclass, String _summary, String _message, Integer _ID){
+    public ZenossAlarmProperties(Integer _severity, Integer _prodState, String _device, String _component, String _eventclass, String _summary, String _message, String _ID){
         severity = _severity;
         prodState = _prodState;
         device = _device;

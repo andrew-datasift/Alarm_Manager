@@ -67,8 +67,6 @@ public class ZenossInterface {
         ZENOSS_USERNAME = username;
         ZENOSS_PASSWORD = password;
 
-        System.out.println(ZENOSS_HOST);
-        System.out.println(ZENOSS_PROTOCOL);
         
         HttpPost httpost = new HttpPost(ZENOSS_INSTANCE +
                            "/zport/acl_users/cookieAuthHelper/login");

@@ -65,8 +65,21 @@ public class alarmManager {
      * checkAlarms uses the Timer scheduler to run and AlarmManagerState.run() method
      * at the prescribed interval.
      */
+    
+    /*
+     * TODO: Add "snooze function" to temporarily raise the threshold on a specific alarm for a short period, eg for maintainance or if there is
+     * a known period of high load. Will probably need some kind of additional listener thread or a periodic check of some file.
+     */
+    
+    /*
+     * TODO: Add entry to config to set the port for the HTTP interface, and handle any failures gracefully.
+     */
 
-    private static void checkAlarms(AlarmManagerState ams, Boolean once, int interval){
+    private static void checkAlarms (AlarmManagerState ams, Boolean once, int interval) throws Exception {
+        //HTTPapi httpapi = new HTTPapi();
+        //httpapi.launch();
+        Thread thread1 = new Thread(new HTTPapi(state), "thread1");
+        thread1.start();
         Timer timer = new Timer();
         if (once) ams.run();
         else timer.schedule(ams,0, interval);
