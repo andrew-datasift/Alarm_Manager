@@ -307,7 +307,9 @@ public class Alarm {
     
     @Override
     public String toString(){
-        String s = "{\"ID\": \"" + ID + "\", \"component\": \"" + component + "\", \"type\": \"" + type + "\", \"event_class\":" + event_class + "\", \"metric_path\":" + path + ", \"threshold_multiplier\":" + threshold_multiplier + "}";
+        String threshold_type = "min";
+        if (greater_than) threshold_type = "max";
+        String s = "{\"ID\": \"" + ID + "\", \"component\": \"" + component + "\", \"type\": \"" + type + "\", \"threshold_type\": \"" + threshold_type + "\", \"event_class\":" + event_class + "\", \"metric_path\":" + path + ", \"threshold_multiplier\":" + threshold_multiplier + "}";
         return s;
     }
     

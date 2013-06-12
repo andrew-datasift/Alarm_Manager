@@ -10,6 +10,10 @@ import java.util.Timer;
  * sending events to Zenoss 
  */
 
+/*
+ * TODO: Load testing
+ */
+
 public class alarmManager {
     
 
@@ -64,11 +68,6 @@ public class alarmManager {
     /*
      * checkAlarms uses the Timer scheduler to run and AlarmManagerState.run() method
      * at the prescribed interval.
-     */
-    
-    /*
-     * TODO: Add "snooze function" to temporarily raise the threshold on a specific alarm for a short period, eg for maintainance or if there is
-     * a known period of high load. Will probably need some kind of additional listener thread or a periodic check of some file.
      */
     
     /*

@@ -172,7 +172,7 @@ public class AlarmManagerState extends TimerTask {
      * that set of results.
      */
 
-    public void checkalarms(){
+    public synchronized void checkalarms(){
         String query = "/render?" + graphitequery + "&from=-360s&format=json";
         JSONArray response = new JSONArray();
         
@@ -271,7 +271,7 @@ public class AlarmManagerState extends TimerTask {
         
     }
     
-    public boolean alarm_already_triggered(String AlarmID){
+    private boolean alarm_already_triggered(String AlarmID){
 
            if ((CurrentAlarms.get(AlarmID) == null) || (CurrentAlarms.get(AlarmID) == 0)) return false;
            else return true;
@@ -280,7 +280,7 @@ public class AlarmManagerState extends TimerTask {
     
     // Clears the alarm in zenoss as well as clearing the current alarms and the increments counter
 
-    public void clearalarm(ZenossAlarmProperties zap){
+    private void clearalarm(ZenossAlarmProperties zap){
         System.out.println("clearing alarm");
         CurrentAlarms.remove(zap.ID);
         try {
@@ -292,7 +292,7 @@ public class AlarmManagerState extends TimerTask {
 
     }
         
-    public void triggeralarm(ZenossAlarmProperties zap){
+    private void triggeralarm(ZenossAlarmProperties zap){
         try {
             zenoss.createEvent(zap);
             CurrentAlarms.put(zap.ID, zap.severity);
@@ -354,7 +354,7 @@ public class AlarmManagerState extends TimerTask {
         }
     }
     
-    public String ShowAllAlarms(){
+    public synchronized String ShowAllAlarms(){
         
         String s = "{\"alarms\": [";
                 
@@ -369,7 +369,7 @@ public class AlarmManagerState extends TimerTask {
 
     }
     
-    public String ShowIncreasedThresholdAlarms(){
+    public synchronized String ShowIncreasedThresholdAlarms(){
         
         String s = "{\"alarms\": [";
                 
@@ -384,7 +384,7 @@ public class AlarmManagerState extends TimerTask {
 
     }
     
-    public String ShowCurrentAlarms(){
+    public synchronized String ShowCurrentAlarms(){
         String s = "{\"triggered_alarms\": [";
         
                 
@@ -400,7 +400,7 @@ public class AlarmManagerState extends TimerTask {
     }
     
     
-    public String IncreaseThreshold(int AlarmID, Double multiplier, int minutes){
+    public synchronized String IncreaseThreshold(int AlarmID, Double multiplier, int minutes){
         String response = "";
         try {
             AlarmsMap.get(AlarmID).set_multiplier(multiplier);
