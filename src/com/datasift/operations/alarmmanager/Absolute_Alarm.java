@@ -50,7 +50,7 @@ public class Absolute_Alarm extends Alarm{
         
         zap.severity=getcurrentseveritylevel(datapoints, latestmeasurement);
         if (zap.severity == -1) return zap;
-        zap.summary = zap.summary + latestmeasurement + " / " + getthresholdsfortime(datapoints)[zap.severity];
+        zap.summary = zap.summary + " " + latestmeasurement + " / " + getthresholdsfortime(datapoints)[zap.severity];
         return zap;
     }
     

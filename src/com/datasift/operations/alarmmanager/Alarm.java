@@ -218,9 +218,9 @@ public class Alarm {
     public Integer getcurrentseveritylevel(JSONArray datapoints, Double latestmeasurement){
         Double[] localthresholds = getthresholdsfortime(datapoints);
         for (int i=5; i>0; i--){
-           if ( greater_than && (localthresholds[i] != null) && (latestmeasurement >= (localthresholds[i] * threshold_multiplier)) ){
+           if ( greater_than && (localthresholds[i] != null) && (latestmeasurement > (localthresholds[i] * threshold_multiplier)) ){
                return i;
-           } else if ( !greater_than && (localthresholds[i] != null) && (latestmeasurement <= (localthresholds[i] / threshold_multiplier)) ) {
+           } else if ( !greater_than && (localthresholds[i] != null) && (latestmeasurement < (localthresholds[i] / threshold_multiplier)) ) {
                return i;
            }
         }

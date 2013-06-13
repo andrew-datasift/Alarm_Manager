@@ -1,6 +1,7 @@
 package com.datasift.operations.alarmmanager;
 import java.io.FileReader;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.TimerTask;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
@@ -177,6 +178,7 @@ public class AlarmManagerState extends TimerTask {
         JSONArray response = new JSONArray();
         
         // Try and get data from graphite; trigger an alarm if it fails.
+        System.out.println("Querying graphite " + new Date().getTime());
         try {
             response = graphite.getJson(query);
         } catch (Exception e) {
@@ -184,18 +186,23 @@ public class AlarmManagerState extends TimerTask {
             triggeralarm(graphitealarm);
             return;
         }
+        System.out.println("Graphite returned data " + new Date().getTime());
 
         
-        //Go through the stored map of alarms with an incresed threshold and clear the value for any with a time in the past.
+        //Go through the stored map of alarms with an incresed threshold and clear the value for any with a time in the past.        
 
-        for (Integer i:IncreasedThresholds.keySet()){
-            if ( ((Date)IncreasedThresholds.get(i)).before(new Date()) ) {
-                AlarmsMap.get(i).set_multiplier(1.0);
-                IncreasedThresholds.remove(i);
-                Logger.writeline("resetting threshold for alarm " + i);
-            }
+        Iterator it = IncreasedThresholds.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry pairs = (Map.Entry)it.next();
             
+            if ( ((Date)pairs.getValue()).before(new Date()) ) {
+                AlarmsMap.get((Integer)pairs.getKey()).set_multiplier(1.0);
+                Logger.writeline("resetting threshold for alarm " + pairs.getKey());
+                it.remove();
+            }
+
         }
+        
         
         /*
          * Graphite returns data in JSON format. Each metric in the query is send with an ID corresponding to its alarm, which graphite sends back
@@ -259,7 +266,6 @@ public class AlarmManagerState extends TimerTask {
                 }
             }
             
-            System.out.println("Counter level" + IncrementsCounter.get(zap.ID));
         }
         
         /*
@@ -284,7 +290,7 @@ public class AlarmManagerState extends TimerTask {
         System.out.println("clearing alarm");
         CurrentAlarms.remove(zap.ID);
         try {
-            zenoss.closeEvent(zap);
+            //zenoss.closeEvent(zap);
             IncrementsCounter.put(zap.ID, 0);
         } catch (Exception e){
             Logger.writeerror("Error clearing alarm " + zap.ID, e);
@@ -294,12 +300,12 @@ public class AlarmManagerState extends TimerTask {
         
     private void triggeralarm(ZenossAlarmProperties zap){
         try {
-            zenoss.createEvent(zap);
+            //zenoss.createEvent(zap);
             CurrentAlarms.put(zap.ID, zap.severity);
         } catch (Exception e) {
             Logger.writeerror("Problem sending event to Zenoss for alarm on " + zap.ID, e);
         }
-        System.out.println("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component);
+        System.out.println("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
     }
     
     
@@ -386,15 +392,19 @@ public class AlarmManagerState extends TimerTask {
     
     public synchronized String ShowCurrentAlarms(){
         String s = "{\"triggered_alarms\": [";
-        
+        Boolean alarmnotfound = false;
                 
         Iterator it = CurrentAlarms.keySet().iterator();
         while (it.hasNext()) {
             Integer key2 = Integer.parseInt(((String)it.next()).split("_")[0]);
-            s = s + "\n" + (AlarmsMap.get(key2).toString());
-            if (it.hasNext()) s = s + ",";
+            try {
+                s = s + "\n" + (AlarmsMap.get(key2).toString());
+                if (it.hasNext()) s = s + ",";
+            } catch (NullPointerException e) {
+                alarmnotfound = true;
+            }
         }
-
+        if (alarmnotfound) s = s + ", {an unrecognised alarm was found in the list, this is usually because an alarm appears in the state file and has been deleted from the config file}";
         s = s + "\n]\n}";
         return s;
     }

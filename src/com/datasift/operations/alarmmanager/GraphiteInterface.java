@@ -76,7 +76,7 @@ public class GraphiteInterface {
         }
         
         
-        System.out.println(jsonresponse);
+        //System.out.println(jsonresponse);
         return jsonresponse;
     }
     
@@ -125,6 +125,8 @@ public class GraphiteInterface {
         cleanURL = cleanURL.replace("^","%5e");
         cleanURL = cleanURL.replace("(","%28");
         cleanURL = cleanURL.replace(")","%29");
+        cleanURL = cleanURL.replace("{","%7b");
+        cleanURL = cleanURL.replace("}","%7d");
         return cleanURL;
     }
 }

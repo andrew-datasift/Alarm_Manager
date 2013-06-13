@@ -57,8 +57,6 @@ public class HTTPapi  extends AbstractHandler implements Runnable {
         Integer alarm = null;
         for (int i=0; i<query.length; i++){
             String[] pair = query[i].split("=");
-            System.out.println(pair[0]);
-            //System.out.println(pair[1]);
             try {
                 if (pair[0].equalsIgnoreCase("multiplier")) multiplier = Double.parseDouble(pair[1]);
                 else if (pair[0].equalsIgnoreCase("minutes")) minutes = Integer.parseInt(pair[1]);
