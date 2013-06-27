@@ -2,6 +2,7 @@ package com.datasift.operations.alarmmanager;
 import java.io.FileReader;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.TimerTask;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
@@ -16,22 +17,40 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Date;
-
+import org.apache.log4j.Logger;
 
 public class AlarmManagerState extends TimerTask {
     
-    File statefile;
-    String graphite_address;
-    String graphite_username;
-    String graphite_password;
-    Integer graphite_port;
-    String zenoss_address;
-    String zenoss_username;
-    String zenoss_password;
-    Integer zenoss_port;
-    String graphitequery = "";
-    GraphiteInterface graphite;
-    ZenossInterface zenoss;
+    private static Logger logger = Logger.getLogger("AlarmManager.AlarmManagerState");
+    public Integer httpport = null;
+    private File statefile;
+    private String graphite_address;
+    private String graphite_username;
+    private String graphite_password;
+    private Integer graphite_port;
+    private String zenoss_address;
+    private String zenoss_username;
+    private String zenoss_password;
+    private Integer zenoss_port;
+
+    private GraphiteInterface graphite;
+    private ZenossInterface zenoss;
+    
+    // Enabling test mode means alarms are not sent to zenoss, only printed, and all output is forwarded to stdout.
+    private boolean testmode = false;
+    
+    
+    /*
+     * If graphite recieves a URI with more that 16000 characters it returns a 414 error, so we build up queries shorter than
+     * this length and then store all of these queries in the graphitequeries array. (We don't send >100 seperate requests to graphite for
+     * obvious reasons"
+     */
+    
+
+    private String graphitequery = "";
+    private ArrayList graphitequeries = new ArrayList();
+    
+    
     // The various alarm objects, one for each configured alarm, are stored against their ID in this map.
     // The ID is a hash of the metric ID and the alarm type. It is included in the query and comes back with each result from graphite
     // it is then be used to match the result with the alarm that has to process it.
@@ -40,6 +59,11 @@ public class AlarmManagerState extends TimerTask {
     // IncreasedThresholds keeps track of which alarms have had their thresholds temporarily increased. It holds the alarm ID which maps to a
     // Date object representing the time that the incresed threshold is due to expire.
     HashMap<Integer, Date> IncreasedThresholds = new HashMap<Integer, Date>();
+    
+    // IncreasedThresholdValues holds a copy of the increased threshold values purely so they can be saved to a file to allow threshold
+    // changes to persist through a restart. The alarm itself holds the value that is actually used for calculation. (I know it breaks the
+    // golden rule of duplicating data, but it makes the save and restore more elegant).
+    HashMap<Integer, Double> IncreasedThresholdValues = new HashMap<Integer, Double>();
     
     // The three HashMaps below use a string for the alarm ID. This is because they use the expanded alarm ID which allows for multiple
     // alarms to be stored for each alarm in the config file. This occurs when a path holds a wildcard character and returns data for
@@ -60,22 +84,26 @@ public class AlarmManagerState extends TimerTask {
     
     @Override
     public void run(){
-        this.checkalarms();
+        for (Object i:graphitequeries){
+            this.checkalarms((String)i);
+        }
+        
     }
     
     // Primary function of the constructor is to parse the config file as provided on the command line
 
     
-    public AlarmManagerState(String configfile) throws Exception {
+    public AlarmManagerState(String configfile, Boolean _testmode) throws Exception {
         
             JSONParser parser = new JSONParser();
             JSONObject jsonconfig;
+            testmode = _testmode;
             
             try {
                 jsonconfig = (JSONObject)parser.parse(new FileReader(configfile));
                 parse_json(jsonconfig);
             } catch (ParseException e) {
-                Logger.writeerror("Cannot parse config file. Quitting.", e);
+                logger.fatal("Cannot parse config file. Quitting.", e);
             }
 
             // the graphite object holds all details for connecting to graphite
@@ -109,8 +137,13 @@ public class AlarmManagerState extends TimerTask {
         String statefilename = "~/.graphitezenossstate";
         if ((String)config.get("statefile") != null) statefilename=(String)config.get("statefile");
         statefile = new File(statefilename);
-        readalarmsfromfile();
+        
        
+        try {
+            if (config.get("httpport") != null) httpport = Integer.parseInt(config.get("httpport").toString());
+        } catch (NumberFormatException e) {
+            logger.error("Cannot parse HTTP port value, HTTP API will not be enabled.");
+        }
         
         graphite_address = (String)graphiteconf.get("address");
         graphite_port = Integer.parseInt(graphiteconf.get("port").toString());
@@ -136,7 +169,7 @@ public class AlarmManagerState extends TimerTask {
                 else if (type.equalsIgnoreCase("ROC absolute") || type.equalsIgnoreCase("ROC")) tempalarm = new ROC_abs_Alarm(thisalarm);  
                 else if (type.equalsIgnoreCase("baseline")) tempalarm = new Baseline_Alarm(thisalarm);
                 else if (type.equalsIgnoreCase("holt winters")) tempalarm = new HoltWinters_Alarm(thisalarm);
-                else {Logger.writeline("unrecognised type " + type);}
+                else {logger.error("unrecognised type " + type);}
                 
                 /*
                  * Each alarm is stored against its ID which is a unique hash of various values. This hash is included in the outgoing
@@ -144,25 +177,34 @@ public class AlarmManagerState extends TimerTask {
                  * The alarm object creates its own ID hash, its own part of the search query, and analysis of its own result set.
                  */
 
+                /*
+                 * In order to minimise load on graphite the data for many alarms is retrieved at once by creating a large query URI
+                 * with multiple search terms. However graphite will return a 414 error if the URI is larger thatn 16000 characters.
+                 * The graphiteinterface class expands the URI slightly by converting some special characters to hex codes, so we limit here to 
+                 * 12000. If adding the latest alarm will make the query larger than 12000 characters then the current string is stored in the
+                 * "graphitequeries" list and a new graphitequery string is started.
+                 */
                 
                 if (tempalarm.active){
                     AlarmsMap.put(tempalarm.ID,tempalarm);
+                    if ((graphitequery.length() + tempalarm.searchquery.length()) > 12000) {
+                        graphitequeries.add(graphitequery);
+                        graphitequery = "";
+                    }
                     graphitequery = graphitequery+tempalarm.searchquery; 
                                       
-                   /*
-                   * The graphite query for all data is made as a single http get. The search query is built
-                   * up at the same time as the alarms hashmap and stored as the graphitequery string.
-                   */
+
                 }
                 
             }
             catch (Exception e) {
-                Logger.writeerror("failed to process alarm on \"" + thisalarm.get("path") + "\"", e);
+                logger.error("failed to process alarm on \"" + thisalarm.get("path") + "\"", e);
             }
          }
+        graphitequeries.add(graphitequery);
         
-        Logger.writeline("Number of alarms processed: " + AlarmsMap.size());
-
+        logger.info("Number of alarms processed: " + AlarmsMap.size());
+        readstatefromfile();
     
 
     }
@@ -172,13 +214,17 @@ public class AlarmManagerState extends TimerTask {
      * Each result will have a unique alarm ID. The matching alarm is pulled from AlarmMap and used to process
      * that set of results.
      */
+    
+    
+    
+    
+    
 
-    public synchronized void checkalarms(){
-        String query = "/render?" + graphitequery + "&from=-360s&format=json";
+    public synchronized void checkalarms(String _query){
+        String query = "/render?" + _query + "&from=-4h&format=json";
         JSONArray response = new JSONArray();
-        
+
         // Try and get data from graphite; trigger an alarm if it fails.
-        System.out.println("Querying graphite " + new Date().getTime());
         try {
             response = graphite.getJson(query);
         } catch (Exception e) {
@@ -186,9 +232,6 @@ public class AlarmManagerState extends TimerTask {
             triggeralarm(graphitealarm);
             return;
         }
-        System.out.println("Graphite returned data " + new Date().getTime());
-
-        
         //Go through the stored map of alarms with an incresed threshold and clear the value for any with a time in the past.        
 
         Iterator it = IncreasedThresholds.entrySet().iterator();
@@ -196,8 +239,9 @@ public class AlarmManagerState extends TimerTask {
             Map.Entry pairs = (Map.Entry)it.next();
             
             if ( ((Date)pairs.getValue()).before(new Date()) ) {
-                AlarmsMap.get((Integer)pairs.getKey()).set_multiplier(1.0);
-                Logger.writeline("resetting threshold for alarm " + pairs.getKey());
+                AlarmsMap.get((Integer)pairs.getKey()).set_offset(0.0);
+                logger.info("resetting threshold for alarm " + pairs.getKey());
+                IncreasedThresholdValues.remove((Integer)pairs.getKey());
                 it.remove();
             }
 
@@ -211,10 +255,20 @@ public class AlarmManagerState extends TimerTask {
          * Some alarms which contain wildcards for hostname will have multiple data sets returned (one for each host) however the ID will be the same.
          */
 
+
         for (Object i:response){
             JSONObject dataset = (JSONObject)i; 
             Integer alarmID = Integer.parseInt(((String)dataset.get("target")).split("_")[0]);
+            Alarm currentalarm = (Alarm)AlarmsMap.get(alarmID);
             
+            Integer nonecount = nonevalues(dataset);
+            if (nonecount >= currentalarm.triggerincrements) {
+                triggeralarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,"graphite",currentalarm.component,currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,currentalarm.ID.toString()));
+                break;
+            }
+            
+            // TODO: If there is an alarm out for no data then clear it here.
+
             // The alarm object creates a zap object that holds all of the results, even if the alarm is clear.
             ZenossAlarmProperties zap = ((Alarm)AlarmsMap.get(alarmID)).checkalarm(dataset);
             
@@ -250,9 +304,7 @@ public class AlarmManagerState extends TimerTask {
                     if (CurrentAlarms.get(zap.ID) == alarmlevel){
                         triggeralarm(zap);
                     } else {
-                            System.out.println("new alarm threshold - clearing old alarm");
                             clearalarm(zap);
-                            System.out.println("new alarm threshold - triggering new alarm");
                             triggeralarm(zap);
                     }
                     
@@ -273,7 +325,7 @@ public class AlarmManagerState extends TimerTask {
          * Thus after every run the results are saved to a file.
          */
         
-        savealarmstofile();
+        savestatetofile();
         
     }
     
@@ -287,25 +339,36 @@ public class AlarmManagerState extends TimerTask {
     // Clears the alarm in zenoss as well as clearing the current alarms and the increments counter
 
     private void clearalarm(ZenossAlarmProperties zap){
-        System.out.println("clearing alarm");
         CurrentAlarms.remove(zap.ID);
         try {
-            //zenoss.closeEvent(zap);
+            if (testmode) {
+                System.out.println("Clearing alarm on " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+            }
+            else {
+                logger.debug("Clearing alarm on " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+                zenoss.closeEvent(zap);
+            }
             IncrementsCounter.put(zap.ID, 0);
         } catch (Exception e){
-            Logger.writeerror("Error clearing alarm " + zap.ID, e);
+            logger.error("Error clearing alarm " + zap.ID, e);
         }
 
     }
         
     private void triggeralarm(ZenossAlarmProperties zap){
         try {
-            //zenoss.createEvent(zap);
+            if (testmode) {
+                System.out.println("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+            }
+            else {
+                logger.debug("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+                zenoss.createEvent(zap);
+            }
             CurrentAlarms.put(zap.ID, zap.severity);
         } catch (Exception e) {
-            Logger.writeerror("Problem sending event to Zenoss for alarm on " + zap.ID, e);
+            logger.error("Problem sending event to Zenoss for alarm on " + zap.ID, e);
         }
-        System.out.println("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+        
     }
     
     
@@ -327,36 +390,59 @@ public class AlarmManagerState extends TimerTask {
         return last;
     }
     
-    private void savealarmstofile(){
+    private void savestatetofile(){
+
         try {
             FileOutputStream f = new FileOutputStream(statefile);  
             ObjectOutputStream s = new ObjectOutputStream(f);          
             s.writeObject(CurrentAlarms);
+            s.writeObject(IncreasedThresholds);
+            s.writeObject(IncreasedThresholdValues);
+            s.writeObject(IncrementsCounter);
+            s.writeObject(LastAlarmSeverity);
             s.flush();
             s.close();
             f.close();
         } catch (FileNotFoundException e) {
-            Logger.writeerror("Cannot open state file " + statefile.getAbsolutePath() + " alarm state will not be saved.", e);
+            logger.error("Cannot open state file " + statefile.getAbsolutePath() + " alarm state will not be saved.", e);
         } catch (IOException e){
-            Logger.writeerror("Error writing to file " + statefile.getAbsolutePath() + " alarm state will not be saved.", e);
+            logger.error("Error writing to file " + statefile.getAbsolutePath() + " alarm state will not be saved.", e);
         }
     }
     
     
     
-    private void readalarmsfromfile(){ 
+    private void readstatefromfile(){ 
         try {
         FileInputStream f = new FileInputStream(statefile);  
         ObjectInputStream s = new ObjectInputStream(f);  
-        CurrentAlarms = (HashMap<String,Integer>)s.readObject();         
+        CurrentAlarms = (HashMap<String,Integer>)s.readObject();    
+        IncreasedThresholds = (HashMap<Integer, Date>)s.readObject(); 
+        IncreasedThresholdValues = (HashMap<Integer, Double>)s.readObject();
+        IncrementsCounter = (HashMap<String, Integer>)s.readObject(); 
+        LastAlarmSeverity = (HashMap<String, Integer>)s.readObject(); 
         s.close();
         f.close();
+
+        /*
+         * Load the increased thresholds that were saved in the file back into the relevant alarms.
+         * If a threshold increase has expired while the system was shut down then this will be picked up
+         * on the first run and cleared based on the expiry time in "IncreasedThresholds".
+         */
+        for (Integer key:IncreasedThresholdValues.keySet()) { 
+            try {
+               AlarmsMap.get(key).set_offset(IncreasedThresholdValues.get(key));
+            } catch (NullPointerException e) {
+               logger.error("Error setting multiplier for alarm " + key + ". Alarm not found");
+            }
+        }
+        
         } catch (FileNotFoundException e) {
-            Logger.writeline("State file" + statefile.getAbsolutePath() + " does not exist. Previous alarm state cannot be read.");
+            logger.warn("State file" + statefile.getAbsolutePath() + " does not exist. Previous alarm state cannot be read.");
         } catch (IOException e){
-            Logger.writeerror("Error reading from file" + statefile.getAbsolutePath() + " previous state cannot be read.", e);
+            logger.warn("Error reading from file " + statefile.getAbsolutePath() + " previous state cannot be read.", e);
         } catch (ClassNotFoundException e){
-            Logger.writeerror("Error parsing data in " + statefile.getAbsolutePath() + " previous state cannot be read.", e);
+            logger.warn("Error parsing data in " + statefile.getAbsolutePath() + " previous state cannot be read.", e);
         }
     }
     
@@ -413,15 +499,49 @@ public class AlarmManagerState extends TimerTask {
     public synchronized String IncreaseThreshold(int AlarmID, Double multiplier, int minutes){
         String response = "";
         try {
-            AlarmsMap.get(AlarmID).set_multiplier(multiplier);
+            AlarmsMap.get(AlarmID).set_offset(multiplier);
             Date expiry = new Date(new Date().getTime() + (minutes * 60000));
             IncreasedThresholds.put(AlarmID, expiry);
+            IncreasedThresholdValues.put(AlarmID, multiplier);
             response = "Multiplier for alarm " + AlarmID + " set to " + multiplier + " for " + minutes + " minutes.";
         } catch (NullPointerException e) {
             response = "Error setting multiplier for alarm " + AlarmID + ". Alarm not found";
-            Logger.writeerror(response);
+            logger.error(response);
         }
+        savestatetofile();
+        logger.info(response);
         return response;
+    }
+    
+    
+    public Boolean checkfornodata(JSONObject dataset){
+        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
+        if (datapoints.size() == 0) return true;
+        
+        // If the dataset itself is smaller than 6 then use that
+
+        
+        for (int i=1; i<6; i++){
+            if (i > datapoints.size()) break;
+            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
+            if (currentdatapoint.get(0) != null){
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    public Integer nonevalues(JSONObject dataset){
+        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
+
+        Integer count = 0;
+        while (count<datapoints.size()){
+            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-count-1);
+            if (currentdatapoint.get(0) != null) break;
+            else count++;
+        }
+                
+        return count;
     }
     
 }

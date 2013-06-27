@@ -10,13 +10,12 @@ public class Absolute_Alarm extends Alarm{
 
     
     public Absolute_Alarm(JSONObject thisalarm) throws Exception{
-            GetCommonElements(thisalarm);
-        if (thisalarm.get("summary") == null) {
-            String comparison;
-            if (greater_than) comparison = "above";
-            else comparison = "below";
-            summary = path + " is " + comparison + " threshold: ";
-        }
+        GetCommonElements(thisalarm);
+        String comparison;
+        if (greater_than) comparison = "above";
+        else comparison = "below";
+        if (thisalarm.get("summary") == null) summary = summary + " is " + comparison + " threshold: ";
+
     }
     
     /*
@@ -50,7 +49,7 @@ public class Absolute_Alarm extends Alarm{
         
         zap.severity=getcurrentseveritylevel(datapoints, latestmeasurement);
         if (zap.severity == -1) return zap;
-        zap.summary = zap.summary + " " + latestmeasurement + " / " + getthresholdsfortime(datapoints)[zap.severity];
+        zap.summary = zap.summary + " " +  String.format("%.6g", latestmeasurement) + " / " + getthresholdsfortime(datapoints)[zap.severity];
         return zap;
     }
     

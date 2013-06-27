@@ -3,6 +3,7 @@ package com.datasift.operations.alarmmanager;
 import org.json.simple.JSONObject;
 import java.util.ArrayList;
 import org.json.simple.JSONArray;
+import org.apache.log4j.Logger;
 
 /*
  * Alarm is the parent class to all of the individual alarm type objects.
@@ -10,8 +11,11 @@ import org.json.simple.JSONArray;
  * Checking the current values returned by graphite is handled by the individial instances.
  */
 
+
 public class Alarm {
+    private static Logger logger = Logger.getLogger("AlarmManager.Alarm");
     // These are all of the attribures which are defined in the config file for the alarm
+    String name;
     String type;
     String description;
     String summary;
@@ -24,15 +28,19 @@ public class Alarm {
     Integer clearincrements;
     Boolean active;
     
+    // nodataseverity is the severity of the alarm that is triggered if there is no data from graphite.
+    // It will be set to the highest avaliable severity for this alarm. Default to 3.
+    Integer nodataseverity = 3;
+    
     // Search query is the graphite search query generated from the path.
     String searchquery;
     
     // ID is a unique ID for this alarm which is a hash generated from the values above.
     Integer ID;
     
-    // Threshold multipler is used when the alarm manager has been configured to temporarily increase the threshold
-    // of an alarm for a specified time.
-    Double threshold_multiplier = 1.0;
+    // Threshold offset is used when the alarm manager has been configured to temporarily adjust the threshold
+    // of an alarm for a specified time. It can be positive or negative and is added to the threshold when the alarm is called..
+    Double threshold_offset = 0.0;
     Boolean substitute_hostname=false;
     
     // timesList holds all of the time specific thresholds, if any.
@@ -64,15 +72,18 @@ public class Alarm {
      *                  threshold reading is handled by the individual alarm instances (rate of change, holt winters deviation, etc)
      */
     
+
+    
     public void GetCommonElements (JSONObject alarmconfig) throws Exception{
 
         if (alarmconfig.get("path") == null) throw new Exception("\"Path\" value cannot be empty");
         if (alarmconfig.get("component") == null) throw new Exception("\"Component\" value cannot be empty");
         path=(String)alarmconfig.get("path");
+        name=(String)alarmconfig.get("name");
         component=(String)alarmconfig.get("component");
         type = (String)alarmconfig.get("type");
         
-        if (alarmconfig.get("summary") == null) summary = path;
+        if (alarmconfig.get("summary") == null) summary = name;
                 else summary=(String)alarmconfig.get("summary");
         
         description=(String)alarmconfig.get("description");
@@ -81,7 +92,22 @@ public class Alarm {
         
         if (alarmconfig.get("event_class") != null) event_class=(String)alarmconfig.get("event_class");
         
-        ID = (path+component+event_class+(String)alarmconfig.get("type")).hashCode();
+        
+        String thresholdtype = (String)alarmconfig.get("threshold_type");
+        if (thresholdtype == null) 
+            { greater_than = true; }
+        else {
+            if (thresholdtype.equalsIgnoreCase("max"))
+                { greater_than = true; }
+            else if ( thresholdtype.equalsIgnoreCase("min") )
+                { greater_than = false; }
+            else {
+                logger.error("Error parsing alarm for " + path + "value for \"threshold_type\" could not be read.");
+                throw new Exception("Unacceptable value for \"threshold_type\" in alarm on " + path); 
+            }
+        }
+        
+        ID = (path+component+event_class+(String)alarmconfig.get("type")+greater_than.toString() ).hashCode();
         
         
         /*
@@ -118,35 +144,48 @@ public class Alarm {
         if (alarmconfig.get("clear") != null) thresholds[0]=Double.parseDouble(alarmconfig.get("clear").toString());
 
         
+        /*
+         * If no clear threshold is explicitly given then take the lowest given threshold as the clear.
+         */
+        
+        if (thresholds[0] == null){
+           for (int i=1; i<=5; i++){
+           if ( thresholds[i] != null) {
+               thresholds[0] = thresholds[i];
+               break;
+           }
+         }
+        }
+        
+        /*
+         * Find the highest threshold for this alarm and use that as the nodata alarm
+         */
+        
+        for (int i=5; i>0; i--){
+           if ( thresholds[i] != null) {
+               nodataseverity = i;
+               break;
+           }
+        }
+           
+           
         try { triggerincrements=Integer.parseInt(alarmconfig.get("trigger_increments").toString()); }
         catch (NumberFormatException e)
             {
-            Logger.writeerror("Error parsing alarm for " + path + "value for trigger_increments could not be read.", e);
+            logger.error("Error parsing alarm for " + path + "value for trigger_increments could not be read.", e);
             throw new Exception("Unacceptable value for \"trigger_increments\" in alarm on " + path);
             }
         
         try { clearincrements=Integer.parseInt(alarmconfig.get("clear_increments").toString()); }
         catch (NumberFormatException e)
             { 
-            Logger.writeerror("Error parsing alarm for " + path + "value for trigger_increments could not be read.", e);
+            logger.error("Error parsing alarm for " + path + "value for trigger_increments could not be read.", e);
             throw new Exception("Unacceptable value for \"clear_increments\" in alarm on " + path);
             }
         
         
             
-        String thresholdtype = (String)alarmconfig.get("threshold_type");
-        if (thresholdtype == null) 
-            { greater_than = true; }
-        else {
-            if (thresholdtype.equalsIgnoreCase("max"))
-                { greater_than = true; }
-            else if ( thresholdtype.equalsIgnoreCase("min") )
-                { greater_than = false; }
-            else {
-                Logger.writeerror("Error parsing alarm for " + path + "value for \"threshold_type\" could not be read.");
-                throw new Exception("Unacceptable value for \"threshold_type\" in alarm on " + path); 
-            }
-        }
+
         
         Object _active = alarmconfig.get("active");
         if (_active == null) active = true;
@@ -164,7 +203,7 @@ public class Alarm {
                 timesList.add(at);
                 }
             catch (Exception e) {
-                Logger.writeerror("Unacceptable value in time field for alarm on " + path, e);
+                logger.error("Unacceptable value in time field for alarm on " + path, e);
                 throw new Exception("Unacceptable value in time field for alarm on " + path);
                 }
             }
@@ -172,7 +211,7 @@ public class Alarm {
         
         
         if (timesList.isEmpty() &&  thresholds[1] == null &&  thresholds[2] == null &&  thresholds[3] == null &&  thresholds[4] == null &&  thresholds[5] == null){
-            Logger.writeerror("No default thresholds or time specific thresholds provided for alarm " + path);
+            logger.error("No default thresholds or time specific thresholds provided for alarm " + path);
             throw new Exception("No default thresholds or time specific thresholds provided for alarm " + path);
         }
 
@@ -186,7 +225,6 @@ public class Alarm {
     
     
     public ZenossAlarmProperties processresponse(JSONObject dataset){
-        System.out.println("processing graphite data on " + dataset.get("target"));
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
         return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID.toString());
     }
@@ -196,14 +234,12 @@ public class Alarm {
      * This method will then perform any standard functions, such as checking the validity of the dataset, then call the
      * processresponse method which will be unique for each alarm instance.
      * 
-     * TODO: turn the no data alarm back on before putting into production
      */
     
     public ZenossAlarmProperties checkalarm(JSONObject dataset){
         String device = getdevicename( (String)dataset.get("target") );
-        //Integer uniqueID = ID + device.hashCode();
-        //if (checkfornodata(dataset)) return new ZenossAlarmProperties(3,prodState,"graphite_alarm_manager",component,event_class,"Graphite returned no data for alarm: \"" + summary + "\"",uniqueID);
-        if (checkfornodata(dataset)) System.out.println("Graphite returned no data for alarm: \"" + summary + "\"");
+        Integer uniqueID = ID + device.hashCode();
+        if (checkfornodata(dataset)) return new ZenossAlarmProperties(3,prodState,"graphite_alarm_manager",component,event_class,summary + " returned too many none values",uniqueID.toString());
         return processresponse(dataset);
     }
 
@@ -218,15 +254,11 @@ public class Alarm {
     public Integer getcurrentseveritylevel(JSONArray datapoints, Double latestmeasurement){
         Double[] localthresholds = getthresholdsfortime(datapoints);
         for (int i=5; i>0; i--){
-           if ( greater_than && (localthresholds[i] != null) && (latestmeasurement > (localthresholds[i] * threshold_multiplier)) ){
-               return i;
-           } else if ( !greater_than && (localthresholds[i] != null) && (latestmeasurement < (localthresholds[i] / threshold_multiplier)) ) {
-               return i;
-           }
+           if ( (localthresholds[i] != null) && (latestmeasurement > (localthresholds[i] + threshold_offset)) ) return i;
         }
         
-        if ( greater_than && (localthresholds[0] != null) && (latestmeasurement <= (localthresholds[0] * threshold_multiplier))) return 0;
-        if ( !greater_than && (localthresholds[0] != null) && (latestmeasurement >= (localthresholds[0] / threshold_multiplier))) return 0;
+        if ( latestmeasurement <= (localthresholds[0] + threshold_offset)) return 0;
+
         
         return -1;
         
@@ -292,10 +324,10 @@ public class Alarm {
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
         if (datapoints.size() == 0) return true;
         
-        // If the dataset itself is smaller than 10 then use that
+        // If the dataset itself is smaller than 6 then use that
 
         
-        for (int i=1; i<10; i++){
+        for (int i=1; i<6; i++){
             if (i > datapoints.size()) break;
             JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
             if (currentdatapoint.get(0) != null){
@@ -305,16 +337,18 @@ public class Alarm {
         return true;
     }
     
+    
+    
     @Override
     public String toString(){
         String threshold_type = "min";
         if (greater_than) threshold_type = "max";
-        String s = "{\"ID\": \"" + ID + "\", \"component\": \"" + component + "\", \"type\": \"" + type + "\", \"threshold_type\": \"" + threshold_type + "\", \"event_class\":" + event_class + "\", \"metric_path\":" + path + ", \"threshold_multiplier\":" + threshold_multiplier + "}";
+        String s = "{\"ID\": \"" + ID + "\", \"name\": \"" + name + "\", \"component\": \"" + component + "\", \"type\": \"" + type + "\", \"threshold_type\": \"" + threshold_type + "\", \"metric_path\":" + path + ", \"threshold_offset\":" + threshold_offset + "}";
         return s;
     }
     
-    public void set_multiplier(Double _mult){
-        threshold_multiplier = _mult;
+    public void set_offset(Double _offset){
+        threshold_offset = _offset;
     }
 
     

@@ -1,6 +1,8 @@
 package com.datasift.operations.alarmmanager;
 
 import java.util.Timer;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PropertyConfigurator;
 
 
 /*
@@ -10,21 +12,23 @@ import java.util.Timer;
  * sending events to Zenoss 
  */
 
-/*
- * TODO: Load testing
- */
+
 
 public class alarmManager {
     
 
 
     private static AlarmManagerState state;
+    static Logger logger = Logger.getLogger("AlarmManager");
     
     public static void main(String[] args) throws Exception{
+
         
         String configfile="";
         Boolean once = false;
         int interval = 60000;
+        boolean testmode = false;
+        PropertyConfigurator.configure(System.getProperty("log4j.configuration"));
         
         /* 
          * Parse command line arguments
@@ -42,23 +46,27 @@ public class alarmManager {
             } else if (args[i].equals("--once")) {
                 once = true;
                 i++;
+            } else if (args[i].equals("-t")) {
+                testmode = true;
+                i++;
             } else if (args[i].equals("-i")) {
                 i++;
                 interval = Integer.parseInt(args[i]) * 1000;
                 i++;
             }
             else {
-                Logger.writeerror("Unrecognised command line argument:" + args[i]);
+                logger.error("Unrecognised command line argument:" + args[i]);
                 return;
             }
         }
         
         if ( configfile.equals("") )
-        { Logger.writeline("please run with arguments \"-c [config filename]\""); 
+        {  
+          logger.error("please run with arguments \"-c [config filename]\""); 
           return;}
         
-        try { state = new AlarmManagerState(configfile); }
-        catch (java.io.FileNotFoundException e) { Logger.writeline("Cannot find config file, please specify with -c");
+        try { state = new AlarmManagerState(configfile, testmode); }
+        catch (java.io.FileNotFoundException e) { logger.error("Cannot find config file, please specify with -c");
                                 return;}
 
         checkAlarms(state, once, interval);
@@ -69,16 +77,16 @@ public class alarmManager {
      * checkAlarms uses the Timer scheduler to run and AlarmManagerState.run() method
      * at the prescribed interval.
      */
-    
-    /*
-     * TODO: Add entry to config to set the port for the HTTP interface, and handle any failures gracefully.
-     */
 
     private static void checkAlarms (AlarmManagerState ams, Boolean once, int interval) throws Exception {
         //HTTPapi httpapi = new HTTPapi();
         //httpapi.launch();
-        Thread thread1 = new Thread(new HTTPapi(state), "thread1");
-        thread1.start();
+        if (state.httpport != null) {
+            Thread thread1 = new Thread(new HTTPapi(state, state.httpport), "thread1");
+            thread1.start();
+        } else {
+            logger.error("HTTP port not specified in config file, HTTP API will not be available.");
+        }
         Timer timer = new Timer();
         if (once) ams.run();
         else timer.schedule(ams,0, interval);

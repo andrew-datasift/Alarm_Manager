@@ -29,6 +29,19 @@ public class AlarmTime{
             if (at.get("severity1") != null) thresholds[1]=Double.parseDouble(at.get("severity1").toString());
             if (at.get("clear") != null) thresholds[0]=Double.parseDouble(at.get("clear").toString());
             
+         /*
+         * If no clear threshold is explicitly given then take the lowest given threshold as the clear.
+         */
+        
+            if (thresholds[0] == null){
+                for (int i=1; i<=5; i++){
+                if ( thresholds[i] != null) {
+                    thresholds[0] = thresholds[i];
+                    break;
+                    }
+                }
+            }
+
 
         }
         

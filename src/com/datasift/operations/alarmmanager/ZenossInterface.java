@@ -21,7 +21,7 @@ import org.apache.xmlrpc.client.XmlRpcClientConfigImpl;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
 import org.json.simple.parser.JSONParser;
-
+import org.apache.log4j.Logger;
 
 /*
  * Zenoss has two APIs; the REST api and the JSON api. This object implements both.
@@ -36,7 +36,7 @@ public class ZenossInterface {
     private String ZENOSS_USERNAME;
     private String ZENOSS_PASSWORD;
     private Boolean JSONAPI = false;
-
+    private static Logger logger = Logger.getLogger("AlarmManager.ZenossInterface");
     private final static HashMap ROUTERS = new HashMap();
     static {
         ROUTERS.put("MessagingRouter", "messaging");
@@ -87,19 +87,19 @@ public class ZenossInterface {
             response.getEntity().consumeContent();
         }
         catch (java.net.ConnectException e){
-            System.out.println("cannot establish connection to Zenoss");
+            logger.fatal("cannot establish connection to Zenoss", e);
             throw e;
         }
         
         try {connectionTest();}
         catch (org.apache.http.client.ClientProtocolException e){
-            System.out.println("Test query to Zenoss failed");
+            logger.error("Test query to Zenoss failed");
             if (e.getMessage().equals("Moved Temporarily")){
-                System.out.println("Error \"Moved Temporarily\" was returned. This is usually due to an incorrect username or password");
+                logger.error("Error \"Moved Temporarily\" was returned. This is usually due to an incorrect username or password");
             }
             throw e;
         }
-        System.out.println("Connection test to Zenoss successful");
+        logger.info("Connection test to Zenoss successful");
         
     }
     
@@ -234,7 +234,7 @@ public class ZenossInterface {
           return client.execute("sendEvent", new Object[]{params}).toString(); 
         } catch (org.apache.xmlrpc.client.XmlRpcClientException e) {
             if (e.getMessage().equals("Failed to parse server's response: Unknown type: nil")){
-                System.out.println("Clearing alarm \"" + zap.summary + "\" alarm already cleared.");
+                logger.warn("Clearing alarm \"" + zap.summary + "\" alarm already cleared.");
             }
             return "";
         }

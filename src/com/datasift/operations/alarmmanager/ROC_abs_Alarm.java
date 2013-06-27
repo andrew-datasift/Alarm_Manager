@@ -2,6 +2,7 @@ package com.datasift.operations.alarmmanager;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
 import java.util.Date;
+import org.apache.log4j.Logger;
 /**
  * This defines a Rate of Change Absolute Alarm, which measures how much a value has changed over a given time and
  * checks that this is below a predefined threshold.
@@ -9,16 +10,23 @@ import java.util.Date;
  */
 public class ROC_abs_Alarm extends Alarm {
     
-    Integer window = 60;
+    Integer window = 10;
+    private static Logger logger = Logger.getLogger("AlarmManager.Alarm.ROC_abs_Alarm");
     
     public ROC_abs_Alarm(JSONObject thisalarm) throws Exception{
         GetCommonElements(thisalarm);
         try {
             if (thisalarm.get("window") != null) window=Integer.parseInt(thisalarm.get("window").toString());
         } catch (Exception e) {
-            Logger.writeerror("Problem parsing alarm on " + this.path + " window value could not be read.", e);
+            logger.error("Problem parsing alarm on " + this.path + " window value could not be read.", e);
             throw e;
         }
+        
+        String comparison;
+        if (greater_than) comparison = "above";
+        else comparison = "below";
+        if (thisalarm.get("summary") == null) summary = path + " change of reading in " + window + " min is " + comparison + " threshold: ";
+        else summary = summary + " rate of change in " + window + " minutes is " + comparison + " threshold: ";
     }
     
      /*
@@ -56,6 +64,8 @@ public class ROC_abs_Alarm extends Alarm {
         if (max == null || min == null) return zap;
         Double roc = max - min;
         zap.severity=getcurrentseveritylevel(datapoints, roc);
+        if (zap.severity == -1) return zap;
+        zap.summary = zap.summary + " " +  String.format("%.6g", roc) + " / " + getthresholdsfortime(datapoints)[zap.severity];
         // zap.summary = zap.summary + latestmeasurement + " / " + getthresholdsfortime(datapoints)[zap.severity];
         
         return zap;

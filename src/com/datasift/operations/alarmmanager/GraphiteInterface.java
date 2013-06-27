@@ -9,7 +9,7 @@ import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.util.EntityUtils;
 import org.apache.http.HttpEntity;
 import java.net.URL;
-
+import org.apache.log4j.Logger;
 
 import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
@@ -19,6 +19,7 @@ import org.json.simple.parser.JSONParser;
  */
 
 public class GraphiteInterface {
+    private static Logger logger = Logger.getLogger("AlarmManager.GraphiteInterface");
     private static String graphitehost;
     private static String username;
     private static String password;
@@ -27,24 +28,24 @@ public class GraphiteInterface {
     
     public GraphiteInterface (String _graphitehost, int _graphiteport, String _username, String _password) throws Exception{
         if (!_graphitehost.startsWith("http")) _graphitehost = "https://" + _graphitehost;
-        graphitehost = _graphitehost;
+        graphitehost = _graphitehost + ":" + _graphiteport;
         username = _username;
         password = _password;
         httpclient = new DefaultHttpClient();
         
-        httpclient.getCredentialsProvider().setCredentials(
-                    new AuthScope(new URL(graphitehost).getHost(), _graphiteport),
-                    new UsernamePasswordCredentials(username, password));
+        //httpclient.getCredentialsProvider().setCredentials(
+        //            new AuthScope(new URL(graphitehost).getHost(), _graphiteport),
+        //            new UsernamePasswordCredentials(username, password));
         ConnectionTest();
     }
     
     private void ConnectionTest() throws Exception{
         HttpResponse response1 = getData("/render?format=json");
         if (response1.getStatusLine().getStatusCode() == 200){
-            Logger.writeline("Connection test to graphite successful");
+            logger.info("Connection test to graphite successful");
         } else {
-            Logger.writewarn("Did not recieve a 200 HTTP response from graphite during connection test");
-            Logger.writeline(response1.getStatusLine());
+            logger.error("Did not recieve a 200 HTTP response from graphite during connection test");
+            logger.error(response1.getStatusLine());
         }
     }
     
@@ -60,23 +61,21 @@ public class GraphiteInterface {
         JSONArray jsonresponse = new JSONArray();
         String responsestring = "";
         try {
-            HttpResponse response1 = getData(query);
-            if (response1.getStatusLine().getStatusCode() != 200) throw  new org.apache.http.client.HttpResponseException(response1.getStatusLine().getStatusCode(), response1.getStatusLine().toString());
-            HttpEntity entity1 = response1.getEntity();
-            responsestring = EntityUtils.toString(entity1);
+            //HttpResponse response1 = getData(query);
+            //if (response1.getStatusLine().getStatusCode() != 200) throw  new org.apache.http.client.HttpResponseException(response1.getStatusLine().getStatusCode(), response1.getStatusLine().toString());
+            //HttpEntity entity1 = response1.getEntity();
+            responsestring = getResponseString(query);
             jsonresponse = (JSONArray)parser.parse(responsestring);
         } catch (org.apache.http.client.HttpResponseException e) {
-            Logger.writeerror("Grapite returned a non-zero code:", e);
+            logger.error("Grapite returned a non-zero code:", e);
             throw e;
         } catch (Exception e)
         {
-            Logger.writeerror("cannot parse Graphite HTTP response into JSON:\n", e);
-            Logger.writeerror("response from Graphite: " + responsestring);
+            logger.error("cannot parse Graphite HTTP response into JSON:\n", e);
+            logger.error("response from Graphite: " + responsestring);
             throw e;
         }
         
-        
-        //System.out.println(jsonresponse);
         return jsonresponse;
     }
     
@@ -87,7 +86,6 @@ public class GraphiteInterface {
     public HttpResponse getData (String _query) throws Exception{
         String query = cleanupURL(_query);
         HttpResponse response1;
-        
         try {
             HttpGet httpGet = new HttpGet(graphitehost + query);
             response1 = httpclient.execute(httpGet);
@@ -95,22 +93,53 @@ public class GraphiteInterface {
             
             if (response1.getStatusLine().getStatusCode() == 401){
             String responsestring = EntityUtils.toString(response1.getEntity());
-            Logger.writeerror("Username or password incorrect for graphite. Quitting");
-            Logger.writeline("HTTP request response:");
-            Logger.writeline(responsestring);
+            logger.fatal("Username or password incorrect for graphite. Quitting");
+            logger.error("HTTP request response:");
+            logger.error(responsestring);
             throw new Exception("Graphite username or password incorrect");
             } 
             
         } catch (java.net.UnknownHostException e){
-            Logger.writeerror("Unable to resolve hostname \"" + graphitehost + "\". Quitting");
+            logger.fatal("Unable to resolve hostname \"" + graphitehost + "\". Quitting", e);
             throw e;
         } catch (org.apache.http.conn.HttpHostConnectException e){
-            Logger.writeerror("Graphite server address unreachable: \"" + graphitehost + "\". Quitting");
+            logger.fatal("Graphite server address unreachable: \"" + graphitehost + "\". Quitting", e);
             throw e;
         }
         return response1;
     }
     
+    
+        public String getResponseString (String _query) throws Exception{
+        String query = cleanupURL(_query);
+        HttpResponse response1;
+        String httpresponse = "";
+        try {
+            HttpGet httpGet = new HttpGet(graphitehost + query);
+
+            response1 = httpclient.execute(httpGet);
+            HttpEntity entity1 = response1.getEntity();
+            httpresponse = EntityUtils.toString(entity1);
+
+            httpGet.releaseConnection();
+            
+            if (response1.getStatusLine().getStatusCode() == 401){
+            String responsestring = EntityUtils.toString(response1.getEntity());
+            logger.fatal("Username or password incorrect for graphite. Quitting");
+            logger.error("HTTP request response:");
+            logger.error(responsestring);
+            throw new Exception("Graphite username or password incorrect");
+            } 
+            
+        } catch (java.net.UnknownHostException e){
+            logger.fatal("Unable to resolve hostname \"" + graphitehost + "\". Quitting", e);
+            throw e;
+        } catch (org.apache.http.conn.HttpHostConnectException e){
+            logger.fatal("Graphite server address unreachable: \"" + graphitehost + "\". Quitting", e);
+            throw e;
+        }
+        return httpresponse;
+    }
 
     
     /*
