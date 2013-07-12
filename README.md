@@ -16,8 +16,7 @@ At the top level the json object is split into two sections:
 * 'config' - Details for connecting to graphite and zenoss, as well as the location of a state file for persisting information
 * 'alarms' - An array containing each of the alarms that will be handled by the application.#
 
-config
-------
+### 'config' section
 
 	"config": {
 		"graphite": {
