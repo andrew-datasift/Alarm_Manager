@@ -12,9 +12,12 @@ The alarm generator takes its configuration from a file in json format which is 
 
 An example configuration file is included in the repository which, combined with this document, should make the configuration schema clear.
 
-There are two sections:
+At the top level the json object is split into two sections:
 * 'config' - Details for connecting to graphite and zenoss, as well as the location of a state file for persisting information
-* 'alarms' - An array containing each of the alarms that will be handled by the application.
+* 'alarms' - An array containing each of the alarms that will be handled by the application.#
+
+config
+------
 
 Each entry in the alarms array is a tuple containing the following values (If a default is given the value is not required):
 
