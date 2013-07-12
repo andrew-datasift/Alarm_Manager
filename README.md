@@ -123,6 +123,23 @@ Alarms can also have different thresholds at different times of day. For example
 
 Those thresholds will then be used between the start and end times. The alarm manager makes no attempt to sanity check the times given, they can overlap and have gaps. When a set of results comes in it will check the values in the "times" array in order to see if the current time is after the start time and before the end time, if so it will use those thresholds. If it gets to the last entry without a match then it will look for default severity thresholds without specified times, and if there is still no match it will stop processing that alarm.
 
+Wildcards in alarm paths
+========
+
+If you wish to apply an alarm for multiple paths with a single alarm entry you can use wildcards. Eg to configure 4 seperate alarms, one for each of the following metrics
+
+    devices.servers.sft010.cpu
+    devices.servers.sft009.cpu
+    devices.servers.sft008.cpu
+    devices.servers.sft007.cpu
+
+A * in the metric path will return all of the metrics above, however a graphite search path can legitimately have a * without wanting to create multiple alarms, thus alarmmanager uses a flag $$.
+A metric path to create an alarm on each of the entries above would thus be:
+
+    devices.servers.$$.cpu
+
+The name that graphite returns in place of the wildcard will be used as the device name for the resulting alarm. So if sft009 breaches threshold then "sft009" will be the device name of the resulting alarm. For all other alarms the device name is "graphite".
+
 
 Adjusting alarms via the JSON API
 ========
