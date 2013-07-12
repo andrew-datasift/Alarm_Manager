@@ -77,11 +77,14 @@ public class Alarm {
     public void GetCommonElements (JSONObject alarmconfig) throws Exception{
 
         if (alarmconfig.get("path") == null) throw new Exception("\"Path\" value cannot be empty");
-        if (alarmconfig.get("component") == null) throw new Exception("\"Component\" value cannot be empty");
+        if (alarmconfig.get("name") == null) throw new Exception("\"Name\" value cannot be empty");
         path=(String)alarmconfig.get("path");
         name=(String)alarmconfig.get("name");
         component=(String)alarmconfig.get("component");
         type = (String)alarmconfig.get("type");
+        
+        if (alarmconfig.get("component") == null) component = name;
+                else component=(String)alarmconfig.get("component");
         
         if (alarmconfig.get("summary") == null) summary = name;
                 else summary=(String)alarmconfig.get("summary");
@@ -254,10 +257,20 @@ public class Alarm {
     public Integer getcurrentseveritylevel(JSONArray datapoints, Double latestmeasurement){
         Double[] localthresholds = getthresholdsfortime(datapoints);
         for (int i=5; i>0; i--){
-           if ( (localthresholds[i] != null) && (latestmeasurement > (localthresholds[i] + threshold_offset)) ) return i;
+           if (greater_than) {
+               if ( (localthresholds[i] != null) && (latestmeasurement > (localthresholds[i] + threshold_offset)) ) return i;
+           } else {
+               if ( (localthresholds[i] != null) && (latestmeasurement < (localthresholds[i] - threshold_offset)) ) return i;
+           }
+           
         }
         
-        if ( latestmeasurement <= (localthresholds[0] + threshold_offset)) return 0;
+        if (greater_than) {
+            if ( latestmeasurement <= (localthresholds[0] + threshold_offset)) return 0;
+        } else {
+            if ( latestmeasurement >= (localthresholds[0] + threshold_offset)) return 0;
+        }
+        
 
         
         return -1;

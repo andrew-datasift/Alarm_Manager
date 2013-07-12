@@ -75,7 +75,7 @@ public class HTTPapi  extends AbstractHandler implements Runnable {
                 logger.error("Error setting new threshold, required field not present (multiplier, minutes and alarm_id)");
                 return "Error setting new threshold, required field not present (multiplier, minutes and alarm_id)";
         }
-        
+        logger.info("Increasing threshold for alarm ID " + alarm + " by " + offset + " for " + minutes + " minutes.");
         return ams.IncreaseThreshold(alarm, offset, minutes);
     }
     
@@ -84,7 +84,7 @@ public class HTTPapi  extends AbstractHandler implements Runnable {
     {
         Server server = new Server(port);
         server.setHandler(this);
- 
+        logger.info("HTTP server is listenning on port " + port);
         server.start();
         server.join();
         
@@ -94,11 +94,10 @@ public class HTTPapi  extends AbstractHandler implements Runnable {
     
     @Override
     public void run() {
-		//Display info about this particular thread
                 try {
                     launch();  
                 } catch (BindException e) {
-                    logger.error("Cannot bind to specified port, address in use. HTTPAPI will not be available");
+                    logger.error("Cannot bind to specified port, address in use. HTTP API will not be available");
                 } catch (Exception e) {
                     logger.error("Error from HTTP API", e);
                 }

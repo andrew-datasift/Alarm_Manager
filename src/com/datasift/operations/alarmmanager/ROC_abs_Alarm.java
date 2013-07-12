@@ -10,7 +10,7 @@ import org.apache.log4j.Logger;
  */
 public class ROC_abs_Alarm extends Alarm {
     
-    Integer window = 10;
+    Integer window = 60;
     private static Logger logger = Logger.getLogger("AlarmManager.Alarm.ROC_abs_Alarm");
     
     public ROC_abs_Alarm(JSONObject thisalarm) throws Exception{
@@ -25,7 +25,7 @@ public class ROC_abs_Alarm extends Alarm {
         String comparison;
         if (greater_than) comparison = "above";
         else comparison = "below";
-        if (thisalarm.get("summary") == null) summary = path + " change of reading in " + window + " min is " + comparison + " threshold: ";
+        if (thisalarm.get("summary") == null) summary = name + " change in " + window + " min is " + comparison + " threshold: ";
         else summary = summary + " rate of change in " + window + " minutes is " + comparison + " threshold: ";
     }
     
@@ -65,7 +65,7 @@ public class ROC_abs_Alarm extends Alarm {
         Double roc = max - min;
         zap.severity=getcurrentseveritylevel(datapoints, roc);
         if (zap.severity == -1) return zap;
-        zap.summary = zap.summary + " " +  String.format("%.6g", roc) + " / " + getthresholdsfortime(datapoints)[zap.severity];
+        zap.summary = zap.summary + " " +  String.format("%.0f", roc) + " / " + String.format("%.0f", getthresholdsfortime(datapoints)[zap.severity]);
         // zap.summary = zap.summary + latestmeasurement + " / " + getthresholdsfortime(datapoints)[zap.severity];
         
         return zap;

@@ -12,7 +12,9 @@ import org.apache.log4j.PropertyConfigurator;
  * sending events to Zenoss 
  */
 
-
+/*
+ * TODO: LOG ALL THE THINGS!!!
+ */
 
 public class alarmManager {
     
@@ -22,8 +24,9 @@ public class alarmManager {
     static Logger logger = Logger.getLogger("AlarmManager");
     
     public static void main(String[] args) throws Exception{
-
         
+
+        logger.info("AlarmManager started");
         String configfile="";
         Boolean once = false;
         int interval = 60000;
@@ -82,7 +85,7 @@ public class alarmManager {
         //HTTPapi httpapi = new HTTPapi();
         //httpapi.launch();
         if (state.httpport != null) {
-            Thread thread1 = new Thread(new HTTPapi(state, state.httpport), "thread1");
+            Thread thread1 = new Thread(new HTTPapi(state, state.httpport), "HTTP_API");
             thread1.start();
         } else {
             logger.error("HTTP port not specified in config file, HTTP API will not be available.");

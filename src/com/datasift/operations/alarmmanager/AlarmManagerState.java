@@ -70,7 +70,7 @@ public class AlarmManagerState extends TimerTask {
     // multiple servers.
     
     // CurrentAlarms keeps track of any alarms currently triggered, so that they can be cleared or incremented as appropriate.
-    HashMap<String, Integer> CurrentAlarms = new HashMap<String, Integer>();
+    HashMap<String, ZenossAlarmProperties> CurrentAlarms = new HashMap<String, ZenossAlarmProperties>();
     
     // IncrementsCounter keeps track of how many times an alarm has reported an above threshold value, so the alarm is triggered
     // when the correct number of results has been passed.
@@ -84,10 +84,14 @@ public class AlarmManagerState extends TimerTask {
     
     @Override
     public void run(){
+        Thread.currentThread().setName("Metric_checker");
+        logger.debug("============Starting new metrics run.===========");
         for (Object i:graphitequeries){
             this.checkalarms((String)i);
         }
-        
+        logger.debug("=============Metrics run complete.==============");
+        logger.debug("Currently active alarms:");
+        logger.debug(ShowCurrentAlarms());
     }
     
     // Primary function of the constructor is to parse the config file as provided on the command line
@@ -204,6 +208,7 @@ public class AlarmManagerState extends TimerTask {
         graphitequeries.add(graphitequery);
         
         logger.info("Number of alarms processed: " + AlarmsMap.size());
+        logger.debug(ShowAllAlarms());
         readstatefromfile();
     
 
@@ -222,8 +227,11 @@ public class AlarmManagerState extends TimerTask {
 
     public synchronized void checkalarms(String _query){
         String query = "/render?" + _query + "&from=-4h&format=json";
+        System.out.println(query);
+        logger.debug("Sending the following query to graphite:");
+        logger.debug(query);
         JSONArray response = new JSONArray();
-
+        
         // Try and get data from graphite; trigger an alarm if it fails.
         try {
             response = graphite.getJson(query);
@@ -232,6 +240,9 @@ public class AlarmManagerState extends TimerTask {
             triggeralarm(graphitealarm);
             return;
         }
+        
+        
+        
         //Go through the stored map of alarms with an incresed threshold and clear the value for any with a time in the past.        
 
         Iterator it = IncreasedThresholds.entrySet().iterator();
@@ -246,8 +257,7 @@ public class AlarmManagerState extends TimerTask {
             }
 
         }
-        
-        
+
         /*
          * Graphite returns data in JSON format. Each metric in the query is send with an ID corresponding to its alarm, which graphite sends back
          * in the response.
@@ -257,68 +267,85 @@ public class AlarmManagerState extends TimerTask {
 
 
         for (Object i:response){
-            JSONObject dataset = (JSONObject)i; 
-            Integer alarmID = Integer.parseInt(((String)dataset.get("target")).split("_")[0]);
+            JSONObject dataset = (JSONObject)i;
+            String target = ((String)dataset.get("target"));
+            Integer alarmID = Integer.parseInt(((String)dataset.get("target")).split("_", 2)[0]);
             Alarm currentalarm = (Alarm)AlarmsMap.get(alarmID);
             
+            logger.debug("response for " + target);
+            logger.debug((JSONArray)dataset.get("datapoints"));
+            
             Integer nonecount = nonevalues(dataset);
-            if (nonecount >= currentalarm.triggerincrements) {
-                triggeralarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,"graphite",currentalarm.component,currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,currentalarm.ID.toString()));
-                break;
+            if ((nonecount > 4) && (nonecount >= currentalarm.triggerincrements)) {
+                triggeralarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,currentalarm.getdevicename(target),currentalarm.component,currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true));
             }
-            
-            // TODO: If there is an alarm out for no data then clear it here.
+            else {
+                if ((CurrentAlarms.get(target) != null) && (CurrentAlarms.get(target).nodataalarm)) clearalarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,currentalarm.getdevicename(target),currentalarm.component,currentalarm.event_class,"",target));
 
-            // The alarm object creates a zap object that holds all of the results, even if the alarm is clear.
-            ZenossAlarmProperties zap = ((Alarm)AlarmsMap.get(alarmID)).checkalarm(dataset);
-            
-            String graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_")[1] + "&height=300&width=500&from=-2hours";
-            zap.message=zap.message + " <img src='" + graphURL + "' />";
-            zap.message=zap.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
-            int alarmlevel = zap.severity;
-            
 
-            int lastseverity = getlastseverity(zap.ID);
-            if (lastseverity == zap.severity) incrementcounterforID(zap.ID);
-            else IncrementsCounter.put(zap.ID, 1);
-            int currentcounter = getcountervalue(zap.ID);
-            LastAlarmSeverity.put(zap.ID, zap.severity);
-            
-            
-            /* If the level is 0 (clear)then check if an alarm has been triggered. If it has, and enough clear values have
-             * come in, then clear the alarm.
-             */
+                // The alarm object creates a zap object that holds all of the results, even if the alarm is clear.
+                ZenossAlarmProperties zap = ((Alarm)AlarmsMap.get(alarmID)).checkalarm(dataset);
 
-            // -1 means no threshold was triggered but the clear threshold was also no met, which means do nothing. 
-            
-            if (alarmlevel == 0 && (alarm_already_triggered(zap.ID)) && (currentcounter >= ((Alarm)AlarmsMap.get(alarmID)).clearincrements)){
-                clearalarm(zap);
-            } else if (alarmlevel > 0) {
-                if (alarm_already_triggered(zap.ID)){
-                    
-                    /* if an alarm level has been breached and there is already an alarm out for at that level then re-send to
-                     * zenoss to increment it.
-                     * If the alarm is a different level then re-issue at the new level by clearing the alarm and issuing a new one.
-                     * This will happen immediately, without waiting for the increments threshold to be reached. This is because 
-                     */
-                    if (CurrentAlarms.get(zap.ID) == alarmlevel){
-                        triggeralarm(zap);
-                    } else {
-                            clearalarm(zap);
-                            triggeralarm(zap);
-                    }
-                    
-                /* if an alarm level is breached and there is not already an alarm out then increment the counter and, if it reaches
-                 * enough values, trigger the alarm.
+                String graphURL;
+                Double threshold = 0.0;
+                // Find the threshold for the current severity level and add to graph
+                try { threshold = currentalarm.getthresholdsfortime((JSONArray)dataset.get("datapoints"))[zap.severity]; }
+                catch (Exception e) { logger.error("Cannot retrieve threshold for alarm " + alarmID, e); }
+    
+                
+                if (currentalarm.substitute_hostname) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&target=alias(threshold(" + threshold + "),\"Threshold\")&height=300&width=500&from=-2hours";
+                else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&target=alias(threshold(" + threshold + "),\"Threshold\")&height=300&width=500&from=-2hours";
+                zap.message=zap.message + " <img src='" + graphURL + "' />";
+                zap.message=zap.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
+                int alarmlevel = zap.severity;
+                System.out.println(graphURL);
+
+                int lastseverity = getlastseverity(zap.ID);
+                if (lastseverity == zap.severity) incrementcounterforID(zap.ID);
+                else IncrementsCounter.put(zap.ID, 1);
+                int currentcounter = getcountervalue(zap.ID);
+                LastAlarmSeverity.put(zap.ID, zap.severity);
+
+
+                /* If the level is 0 (clear)then check if an alarm has been triggered. If it has, and enough clear values have
+                 * come in, then clear the alarm.
                  */
-                } else {
-                    if (currentcounter >= ((Alarm)AlarmsMap.get(alarmID)).triggerincrements) {
-                        triggeralarm(zap);
+
+                // -1 means no threshold was triggered but the clear threshold was also no met, which means do nothing. 
+
+                if (alarmlevel == 0 && (alarm_already_triggered(zap.ID)) && (currentcounter >= ((Alarm)AlarmsMap.get(alarmID)).clearincrements)){
+                    clearalarm(zap);
+                } else if (alarmlevel > 0) {
+                    logger.debug("alarm " + currentalarm.name + " is outside threshold at the current time");
+                    if (alarm_already_triggered(zap.ID)){
+
+                        /* if an alarm level has been breached and there is already an alarm out for at that level then re-send to
+                         * zenoss to increment it.
+                         * If the alarm is a different level then re-issue at the new level by clearing the alarm and issuing a new one.
+                         * This will happen immediately, without waiting for the increments threshold to be reached.
+                         * Whether to wait for the increments here is a judgement call, it may be better to change in future.
+                         */
+                        if ((CurrentAlarms.get(zap.ID)).severity == alarmlevel){
+                            triggeralarm(zap);
+                        } else {
+                                clearalarm(zap);
+                                triggeralarm(zap);
+                        }
+
+                    /* if an alarm level is breached and there is not already an alarm out then increment the counter and, if it reaches
+                     * enough values, trigger the alarm.
+                     */
+                    } else {
+                        if (currentcounter >= ((Alarm)AlarmsMap.get(alarmID)).triggerincrements) {
+                            triggeralarm(zap);
+                        }
                     }
                 }
-            }
             
+            }
         }
+
+
         
         /*
          * AlarmManagerState must know the details of all current alarms to make sure that alarms are created, incremented and cleared correctly.
@@ -331,7 +358,7 @@ public class AlarmManagerState extends TimerTask {
     
     private boolean alarm_already_triggered(String AlarmID){
 
-           if ((CurrentAlarms.get(AlarmID) == null) || (CurrentAlarms.get(AlarmID) == 0)) return false;
+           if ((CurrentAlarms.get(AlarmID) == null) || (CurrentAlarms.get(AlarmID).severity == 0)) return false;
            else return true;
 
     }
@@ -342,10 +369,10 @@ public class AlarmManagerState extends TimerTask {
         CurrentAlarms.remove(zap.ID);
         try {
             if (testmode) {
-                System.out.println("Clearing alarm on " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+                System.out.println("Clearing alarm on " + zap.device + " component: " + zap.component + " event class " + zap.eventclass + " ID: " + zap.ID );
             }
             else {
-                logger.debug("Clearing alarm on " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+                logger.info("Clearing alarm on " + zap.device + " component: " + zap.component + " event class " + zap.eventclass + " ID: " + zap.ID );
                 zenoss.closeEvent(zap);
             }
             IncrementsCounter.put(zap.ID, 0);
@@ -361,10 +388,10 @@ public class AlarmManagerState extends TimerTask {
                 System.out.println("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
             }
             else {
-                logger.debug("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
+                logger.info("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
                 zenoss.createEvent(zap);
             }
-            CurrentAlarms.put(zap.ID, zap.severity);
+            CurrentAlarms.put(zap.ID, zap);
         } catch (Exception e) {
             logger.error("Problem sending event to Zenoss for alarm on " + zap.ID, e);
         }
@@ -416,7 +443,7 @@ public class AlarmManagerState extends TimerTask {
         try {
         FileInputStream f = new FileInputStream(statefile);  
         ObjectInputStream s = new ObjectInputStream(f);  
-        CurrentAlarms = (HashMap<String,Integer>)s.readObject();    
+        CurrentAlarms = (HashMap<String,ZenossAlarmProperties>)s.readObject();    
         IncreasedThresholds = (HashMap<Integer, Date>)s.readObject(); 
         IncreasedThresholdValues = (HashMap<Integer, Double>)s.readObject();
         IncrementsCounter = (HashMap<String, Integer>)s.readObject(); 

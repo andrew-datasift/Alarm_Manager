@@ -45,11 +45,14 @@ public class Absolute_Alarm extends Alarm{
                 break;
             }
         }
+
         if (latestmeasurement == null) return zap;
         
         zap.severity=getcurrentseveritylevel(datapoints, latestmeasurement);
+        
+
         if (zap.severity == -1) return zap;
-        zap.summary = zap.summary + " " +  String.format("%.6g", latestmeasurement) + " / " + getthresholdsfortime(datapoints)[zap.severity];
+        zap.summary = zap.summary + " " +  String.format("%.0f", latestmeasurement) + " / " + String.format("%.0f", getthresholdsfortime(datapoints)[zap.severity]);
         return zap;
     }
     
