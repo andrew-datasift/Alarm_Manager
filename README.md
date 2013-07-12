@@ -19,7 +19,7 @@ At the top level the json object is split into two sections:
 config
 ------
 
-`	"config": {
+	"config": {
 		"graphite": {
 			"address": "http://ded3011",
 			"port": 81,
@@ -33,7 +33,7 @@ config
 			"password": "LKJliosjaifjw045erfd"
 		},
 		"statefile": "/home/andrewm/.graphitezenossstate",
-	},`
+	},
 
 Each entry in the alarms array is a tuple containing the following values (If a default is given the value is not required):
 
