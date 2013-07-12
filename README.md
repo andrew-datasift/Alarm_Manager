@@ -37,7 +37,7 @@ At the top level the json object is split into two sections:
 
 This sections for zenoss and graphite should be self explanatory. They both communicate via HTTP and will assume basic auth via http unless "https" is prepended to the address.
 The statefile is used to store the current state of the alarm manager so that it can keep track of triggered alarms, suspended metrics, etc, past restarts.
-The HTTP port is used for the API detailed below, 8080 is assumed unless specified otherwise. If the requested port is unavailable then a warning will be printed in the log but execution will not be affected.
+The HTTP port is used for the API detailed below. If the requested port is unavailable or no port is given then a warning will be printed in the log but execution will not be affected.
 
 ### 'alarms' section
 
@@ -159,9 +159,9 @@ The ID field is the identifier which needs to be used to adjust the alarm, the t
 To adjust the threshold use a post in the following format:
 
     [batman:~]$ curl -XPOST "localhost:8080/?set_offset&alarm_id=-1984525734&offset=100&minutes=60"
-    Offset for alarm -1984525734 set to 100.0 for 60 minutes.
+    {"success": true, "response": "Offset for alarm -1984525734 set to 100.0 for 60 minutes."}
 
-The thresholds for this alarm will then be increased by 100 for one hour then revert back to normal. The offset is applied to all severity thresholds, and can be both positive and negative.
+The thresholds for this alarm will then be increased by 100 for one hour then revert back to normal. The offset is applied to all severity thresholds, can be both positive and negative and is not restricted to integers.
 
 
 
