@@ -19,6 +19,22 @@ At the top level the json object is split into two sections:
 config
 ------
 
+`	"config": {
+		"graphite": {
+			"address": "http://ded3011",
+			"port": 81,
+			"username": "andrewm",
+			"password": "Tgt86197"
+		},
+		"zenoss": {
+			"address": "https://spider.sysms.net",
+			"port": "9080",
+			"username": "graphitezenossbridge",
+			"password": "LKJliosjaifjw045erfd"
+		},
+		"statefile": "/home/andrewm/.graphitezenossstate",
+	},`
+
 Each entry in the alarms array is a tuple containing the following values (If a default is given the value is not required):
 
 * 'active' - "true" or "false" used to activate or deactivate the alarm (default: true)
