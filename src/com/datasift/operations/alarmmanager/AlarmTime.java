@@ -3,6 +3,7 @@ package com.datasift.operations.alarmmanager;
 import org.json.simple.JSONObject;
 import java.util.Date;
 import java.text.SimpleDateFormat;
+import org.apache.log4j.Logger;
 /**
  * Alarms can have different thresholds for different times of day.
  * AlarmTime holds the thresholds for each severity, along with a start and end time, for a given period.
@@ -11,13 +12,14 @@ public class AlarmTime{
         int start;
         int end;
         Double[] thresholds = new Double[6];
-        
+        private static Logger logger = Logger.getLogger("AlarmManager.Alarm");
         /*
          * The constructor takes a JSON object, typically grabbed from a config file, which holds the neccessary values.
          * "start" and "end" are times in 24 hour HHMM notation.
          */
             
         public AlarmTime(JSONObject at){
+            
             
             start=Integer.parseInt(at.get("start").toString());
             end=Integer.parseInt(at.get("end").toString());
@@ -42,7 +44,6 @@ public class AlarmTime{
                 }
             }
 
-
         }
         
         /**
@@ -61,4 +62,5 @@ public class AlarmTime{
             }
             return false;
         }
+        
     }

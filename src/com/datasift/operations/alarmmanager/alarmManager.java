@@ -27,6 +27,8 @@ public class alarmManager {
         
 
         logger.info("AlarmManager started");
+        Double test = 100000000000.0;
+        System.out.println(String.format("%.0f", test));
         String configfile="";
         Boolean once = false;
         int interval = 60000;

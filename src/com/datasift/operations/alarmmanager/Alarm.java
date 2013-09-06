@@ -218,6 +218,7 @@ public class Alarm {
             throw new Exception("No default thresholds or time specific thresholds provided for alarm " + path);
         }
 
+
     }
     
     /*
@@ -252,6 +253,8 @@ public class Alarm {
      * 
      * The value is multiplied (or divided in the case of a lower-than alarm) by the threshold_multipler. This is usually 1, but can be set to a higher
      * value in order to temporarily increase an alarms threshold.
+     * 
+     * If an alarm is not triggered but is above the clear threshold then -1 will be returned.
      */
     
     public Integer getcurrentseveritylevel(JSONArray datapoints, Double latestmeasurement){

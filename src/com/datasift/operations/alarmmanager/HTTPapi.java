@@ -66,14 +66,14 @@ public class HTTPapi  extends AbstractHandler implements Runnable {
                 else if (pair[0].equalsIgnoreCase("minutes")) minutes = Integer.parseInt(pair[1]);
                 else if (pair[0].equalsIgnoreCase("alarm_id")) alarm = Integer.parseInt(pair[1]);
             } catch (NumberFormatException e) {
-                logger.error("Error setting new threshold, cannot parse value", e);
-                return "Error setting new threshold, cannot parse value";
+                logger.error("{\"success\": false, \"response\": \"Error setting new threshold, cannot parse value\"}", e);
+                return "{\"success\": false, \"response\": \"Error setting new threshold, cannot parse value\"}";
             }
         }
         
         if (offset == null || minutes == null || alarm == null) {
-                logger.error("Error setting new threshold, required field not present (multiplier, minutes and alarm_id)");
-                return "Error setting new threshold, required field not present (multiplier, minutes and alarm_id)";
+                logger.error("Error setting new threshold, required field not present (offset, minutes and alarm_id)");
+                return "{\"success\": false, \"response\": \"Error setting new threshold, required field not present (offset, minutes and alarm_id)\"}";
         }
         logger.info("Increasing threshold for alarm ID " + alarm + " by " + offset + " for " + minutes + " minutes.");
         return ams.IncreaseThreshold(alarm, offset, minutes);

@@ -228,7 +228,7 @@ public class ZenossInterface {
         params.put("severity", zap.severity.toString()); 
         params.put("eventClass", zap.eventclass); 
         params.put("message", zap.message);
-        params.put("eventKey", "GraphiteZenossBridge");
+        params.put("eventKey", "GraphiteZenossBridge_" + zap.ID.toString());
         
         try {
           return client.execute("sendEvent", new Object[]{params}).toString(); 
@@ -248,7 +248,7 @@ public class ZenossInterface {
         data.put("severity", zap.severity.toString());
         data.put("summary", zap.summary);
         data.put("evclass", zap.eventclass);
-        data.put("evclasskey", "");
+        data.put("evclasskey", "GraphiteZenossBridge_" + zap.ID.toString());
 
         return this.routerRequest("EventsRouter", "add_event", data).toString();
     }

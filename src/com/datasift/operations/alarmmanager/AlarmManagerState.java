@@ -86,12 +86,24 @@ public class AlarmManagerState extends TimerTask {
     public void run(){
         Thread.currentThread().setName("Metric_checker");
         logger.debug("============Starting new metrics run.===========");
+
         for (Object i:graphitequeries){
+            try {
             this.checkalarms((String)i);
-        }
-        logger.debug("=============Metrics run complete.==============");
+            } catch (Exception e) {
+                ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(4,1000,"graphite","monitoring","/Status","GraphiteAlarmManager encountered an error processing metrics, see log file for details.", "Exception returned: " + e.getMessage(), "0");
+                triggeralarm(graphitealarm);
+            }
+        } 
+
+        logger.debug("=============Finished processing new metrics.==============");
         logger.debug("Currently active alarms:");
-        logger.debug(ShowCurrentAlarms());
+        try {
+            logger.debug(ShowCurrentAlarms());
+        } catch (Exception e) {
+            logger.error("Problem parsing array of current alarms.", e);
+        }
+        logger.debug("=============Metrics run complete metrics.==============");
     }
     
     // Primary function of the constructor is to parse the config file as provided on the command line
@@ -191,7 +203,7 @@ public class AlarmManagerState extends TimerTask {
                 
                 if (tempalarm.active){
                     AlarmsMap.put(tempalarm.ID,tempalarm);
-                    if ((graphitequery.length() + tempalarm.searchquery.length()) > 12000) {
+                    if ((graphitequery.length() + tempalarm.searchquery.length()) > 5000) {
                         graphitequeries.add(graphitequery);
                         graphitequery = "";
                     }
@@ -210,6 +222,8 @@ public class AlarmManagerState extends TimerTask {
         logger.info("Number of alarms processed: " + AlarmsMap.size());
         logger.debug(ShowAllAlarms());
         readstatefromfile();
+        
+        // TODO: go through imported state maps and remove references to alarms that no longer exist.
     
 
     }
@@ -235,8 +249,12 @@ public class AlarmManagerState extends TimerTask {
         // Try and get data from graphite; trigger an alarm if it fails.
         try {
             response = graphite.getJson(query);
+        } catch (org.apache.http.client.HttpResponseException e) {
+            ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(5,1000,"graphite","monitoring","/Status","Graphite returned an error code to alarm manager: " + e.getMessage(), "See log file for full details", "0");
+            triggeralarm(graphitealarm);
+            return;
         } catch (Exception e) {
-            ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(2,1000,"graphitezenoss","monitoring","/Status","GraphiteZenossBridge cannot receive data from graphite", "Exception returned: " + e.getMessage(), "no_data");
+            ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(5,1000,"graphite","monitoring","/Status","GraphiteAlarmManager cannot parse data from graphite", "Exception returned: " + e.getMessage(), "0");
             triggeralarm(graphitealarm);
             return;
         }
@@ -272,12 +290,21 @@ public class AlarmManagerState extends TimerTask {
             Integer alarmID = Integer.parseInt(((String)dataset.get("target")).split("_", 2)[0]);
             Alarm currentalarm = (Alarm)AlarmsMap.get(alarmID);
             
+            
             logger.debug("response for " + target);
             logger.debug((JSONArray)dataset.get("datapoints"));
             
+            String graphURL;
+     
+            
             Integer nonecount = nonevalues(dataset);
             if ((nonecount > 4) && (nonecount >= currentalarm.triggerincrements)) {
-                triggeralarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,currentalarm.getdevicename(target),currentalarm.component,currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true));
+                if (currentalarm.substitute_hostname) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&height=300&width=500&from=-2hours";
+                else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&height=300&width=500&from=-2hours";
+                ZenossAlarmProperties nodataalarm = new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,currentalarm.getdevicename(target),currentalarm.component,currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true);
+                nodataalarm.message=nodataalarm.message + " <img src='" + graphURL + "' />";
+                nodataalarm.message=nodataalarm.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
+                triggeralarm(nodataalarm);
             }
             else {
                 if ((CurrentAlarms.get(target) != null) && (CurrentAlarms.get(target).nodataalarm)) clearalarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,currentalarm.getdevicename(target),currentalarm.component,currentalarm.event_class,"",target));
@@ -286,19 +313,22 @@ public class AlarmManagerState extends TimerTask {
                 // The alarm object creates a zap object that holds all of the results, even if the alarm is clear.
                 ZenossAlarmProperties zap = ((Alarm)AlarmsMap.get(alarmID)).checkalarm(dataset);
 
-                String graphURL;
+                
                 Double threshold = 0.0;
-                // Find the threshold for the current severity level and add to graph
-                try { threshold = currentalarm.getthresholdsfortime((JSONArray)dataset.get("datapoints"))[zap.severity]; }
-                catch (Exception e) { logger.error("Cannot retrieve threshold for alarm " + alarmID, e); }
+                // Find the threshold for the current severity level and add to graph. If the threshold is -1 or 0 then the alarm is clear or not triggered
+                // in this case the threshold is not needed.
+                if (zap.severity >= 1){
+                    try { threshold = currentalarm.getthresholdsfortime((JSONArray)dataset.get("datapoints"))[zap.severity]; }
+                    catch (Exception e) { logger.error("Cannot retrieve threshold for alarm " + alarmID, e); }
+                }
+
     
                 
                 if (currentalarm.substitute_hostname) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&target=alias(threshold(" + threshold + "),\"Threshold\")&height=300&width=500&from=-2hours";
-                else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&target=alias(threshold(" + threshold + "),\"Threshold\")&height=300&width=500&from=-2hours";
-                zap.message=zap.message + " <img src='" + graphURL + "' />";
+                else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&target=alias(threshold(" + String.format("%.0f", threshold) + "),\"Threshold\")&height=300&width=500&from=-2hours";
+                zap.message=zap.message + "<br> <img src='" + graphURL + "' />";
                 zap.message=zap.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
                 int alarmlevel = zap.severity;
-                System.out.println(graphURL);
 
                 int lastseverity = getlastseverity(zap.ID);
                 if (lastseverity == zap.severity) incrementcounterforID(zap.ID);
@@ -391,7 +421,7 @@ public class AlarmManagerState extends TimerTask {
                 logger.info("triggering alarm severity: " + zap.severity + " device: " + zap.device + " component: " + zap.component + " summary: " + zap.summary);
                 zenoss.createEvent(zap);
             }
-            CurrentAlarms.put(zap.ID, zap);
+            if (!zap.ID.equals("0")) CurrentAlarms.put(zap.ID, zap);
         } catch (Exception e) {
             logger.error("Problem sending event to Zenoss for alarm on " + zap.ID, e);
         }
@@ -509,12 +539,14 @@ public class AlarmManagerState extends TimerTask {
                 
         Iterator it = CurrentAlarms.keySet().iterator();
         while (it.hasNext()) {
-            Integer key2 = Integer.parseInt(((String)it.next()).split("_")[0]);
             try {
+                Integer key2 = Integer.parseInt(((String)it.next()).split("_")[0]);
                 s = s + "\n" + (AlarmsMap.get(key2).toString());
                 if (it.hasNext()) s = s + ",";
             } catch (NullPointerException e) {
                 alarmnotfound = true;
+            } catch (Exception e) {
+                logger.debug("nodataalarm");
             }
         }
         if (alarmnotfound) s = s + ", {an unrecognised alarm was found in the list, this is usually because an alarm appears in the state file and has been deleted from the config file}";
@@ -530,9 +562,9 @@ public class AlarmManagerState extends TimerTask {
             Date expiry = new Date(new Date().getTime() + (minutes * 60000));
             IncreasedThresholds.put(AlarmID, expiry);
             IncreasedThresholdValues.put(AlarmID, multiplier);
-            response = "Multiplier for alarm " + AlarmID + " set to " + multiplier + " for " + minutes + " minutes.";
+            response = "{\"success\": true, \"response\": \"Offset for alarm " + AlarmID + " set to " + multiplier + " for " + minutes + " minutes.\"}";
         } catch (NullPointerException e) {
-            response = "Error setting multiplier for alarm " + AlarmID + ". Alarm not found";
+            response = "{\"success\": false, \"response\": \"Offset setting multiplier for alarm " + AlarmID + ". Alarm not found\"}";
             logger.error(response);
         }
         savestatetofile();

@@ -10,7 +10,7 @@ import org.apache.log4j.Logger;
  */
 public class ROC_abs_Alarm extends Alarm {
     
-    Integer window = 60;
+    Integer window = 10;
     private static Logger logger = Logger.getLogger("AlarmManager.Alarm.ROC_abs_Alarm");
     
     public ROC_abs_Alarm(JSONObject thisalarm) throws Exception{
@@ -48,8 +48,10 @@ public class ROC_abs_Alarm extends Alarm {
         Double min = null;
         Long now = (new Date()).getTime() / 1000;
         
+        //We discard the most recent value for ROC alarms because, in graphite, the most recent value often cannot be trusted. It could
+        //be zero showing a change where none existsm, or in a sumSeries it could be between zero and the true value.
         
-        for (int i=(datapoints.size()-1); i>=0; i--){
+        for (int i=(datapoints.size()-2); i>=0; i--){
             JSONArray currentdatapoint = (JSONArray)datapoints.get(i);
             Long lasttimestamp = (Long)currentdatapoint.get(1);
             if (lasttimestamp < now - (window * 60)) break;

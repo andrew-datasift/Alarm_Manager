@@ -61,13 +61,9 @@ public class GraphiteInterface {
         JSONArray jsonresponse = new JSONArray();
         String responsestring = "";
         try {
-            //HttpResponse response1 = getData(query);
-            //if (response1.getStatusLine().getStatusCode() != 200) throw  new org.apache.http.client.HttpResponseException(response1.getStatusLine().getStatusCode(), response1.getStatusLine().toString());
-            //HttpEntity entity1 = response1.getEntity();
             responsestring = getResponseString(query);
             jsonresponse = (JSONArray)parser.parse(responsestring);
         } catch (org.apache.http.client.HttpResponseException e) {
-            logger.error("Grapite returned a non-zero code:", e);
             throw e;
         } catch (Exception e)
         {
@@ -122,6 +118,7 @@ public class GraphiteInterface {
             httpresponse = EntityUtils.toString(entity1);
 
             httpGet.releaseConnection();
+
             
             if (response1.getStatusLine().getStatusCode() == 401){
             String responsestring = EntityUtils.toString(response1.getEntity());
@@ -131,6 +128,24 @@ public class GraphiteInterface {
             throw new Exception("Graphite username or password incorrect");
             } 
             
+            // TODO: If graphite returns a non-200 code, eg for unexpected error, then try again once before sending alarm.
+            
+            /*
+             * Graphite can, if overloaded, return an error code for a valid response, which will then trigger an error to zenoss
+             * If we get a non-zero error the request is sent again, then only if we get a fail twice will the error be triggered.
+             */
+
+            if (response1.getStatusLine().getStatusCode() != 200){
+            logger.warn("Graphite returned a non-zero response code: " + response1.getStatusLine().getStatusCode() + ". Resending request.");
+            response1 = httpclient.execute(httpGet);
+            entity1 = response1.getEntity();
+            httpresponse = EntityUtils.toString(entity1);
+            httpGet.releaseConnection();
+            } 
+            
+            if (response1.getStatusLine().getStatusCode() != 200){
+                throw new org.apache.http.client.HttpResponseException(response1.getStatusLine().getStatusCode(), response1.getStatusLine().toString());
+            }
         } catch (java.net.UnknownHostException e){
             logger.fatal("Unable to resolve hostname \"" + graphitehost + "\". Quitting", e);
             throw e;
