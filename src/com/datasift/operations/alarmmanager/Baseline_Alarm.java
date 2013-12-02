@@ -24,9 +24,9 @@ public class Baseline_Alarm extends Alarm {
     
     @Override
     public ZenossAlarmProperties processresponse(JSONObject dataset){
-        String device = getdevicename( (String)dataset.get("target") );
-        String uniqueID = ID.toString() + "_" + device;
-        ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,device,component,event_class,summary,uniqueID);
+        String uniquecomponent = getcomponent((String)dataset.get("target"));
+        String uniqueID = ID.toString() + "_" + uniquecomponent;
+        ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,"graphite",uniquecomponent,event_class,summary,uniqueID);
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
 
         

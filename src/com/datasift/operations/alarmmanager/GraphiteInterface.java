@@ -33,9 +33,12 @@ public class GraphiteInterface {
         password = _password;
         httpclient = new DefaultHttpClient();
         
-        //httpclient.getCredentialsProvider().setCredentials(
-        //            new AuthScope(new URL(graphitehost).getHost(), _graphiteport),
-        //            new UsernamePasswordCredentials(username, password));
+        if (!username.equals("") && !password.equals("")){
+            
+        httpclient.getCredentialsProvider().setCredentials(
+                    new AuthScope(new URL(graphitehost).getHost(), _graphiteport),
+                    new UsernamePasswordCredentials(username, password));
+        }
         ConnectionTest();
     }
     
@@ -71,7 +74,6 @@ public class GraphiteInterface {
             logger.error("response from Graphite: " + responsestring);
             throw e;
         }
-        
         return jsonresponse;
     }
     
@@ -171,6 +173,7 @@ public class GraphiteInterface {
         cleanURL = cleanURL.replace(")","%29");
         cleanURL = cleanURL.replace("{","%7b");
         cleanURL = cleanURL.replace("}","%7d");
+        cleanURL = cleanURL.replace(" ","");
         return cleanURL;
     }
 }

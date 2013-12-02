@@ -3,6 +3,7 @@ package com.datasift.operations.alarmmanager;
 import java.util.Timer;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
+import org.json.simple.JSONObject;
 
 
 /*
@@ -12,9 +13,7 @@ import org.apache.log4j.PropertyConfigurator;
  * sending events to Zenoss 
  */
 
-/*
- * TODO: LOG ALL THE THINGS!!!
- */
+
 
 public class alarmManager {
     
@@ -27,9 +26,8 @@ public class alarmManager {
         
 
         logger.info("AlarmManager started");
-        Double test = 100000000000.0;
-        System.out.println(String.format("%.0f", test));
         String configfile="";
+        String alarmsfile="";
         Boolean once = false;
         int interval = 60000;
         boolean testmode = false;
@@ -47,6 +45,10 @@ public class alarmManager {
             if (args[i].equals("-c")) {
                 i++;
                 configfile = args[i];
+                i++;
+            } else if (args[i].equals("-a")) {
+                i++;
+                alarmsfile = args[i];
                 i++;
             } else if (args[i].equals("--once")) {
                 once = true;
@@ -67,12 +69,22 @@ public class alarmManager {
         
         if ( configfile.equals("") )
         {  
-          logger.error("please run with arguments \"-c [config filename]\""); 
+          logger.error("Configuration file not found. Please run with argument \"-c [config filename]\""); 
           return;}
         
-        try { state = new AlarmManagerState(configfile, testmode); }
-        catch (java.io.FileNotFoundException e) { logger.error("Cannot find config file, please specify with -c");
+        if ( alarmsfile.equals("") )
+        {  
+          logger.error("Alarms file not found. Please run with argument \"-a [alarm json filename]\""); 
+          return;}
+        
+        try { state = new AlarmManagerState(configfile, alarmsfile, testmode); }
+        catch (java.io.FileNotFoundException e) { logger.error("Cannot find config file, please specify");
                                 return;}
+        catch (Exception e) {
+            System.out.println("Cannot start alarmmanager. See log file for details");
+            logger.error("Fatal error starting alarmmanager", e);
+            return;
+        }
 
         checkAlarms(state, once, interval);
   

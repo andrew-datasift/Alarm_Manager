@@ -79,6 +79,7 @@ public class ZenossInterface {
                                         "/zport/dmd"));
 
         httpost.setEntity(new UrlEncodedFormEntity(nvps, HTTP.UTF_8));
+        
 
         try {
             // Response from POST not needed, just the cookie
@@ -90,6 +91,11 @@ public class ZenossInterface {
             logger.fatal("cannot establish connection to Zenoss", e);
             throw e;
         }
+        catch (Exception e){
+            logger.fatal("Error collecting cookie from Zenoss", e);
+            throw e;
+        }
+        
         
         try {connectionTest();}
         catch (org.apache.http.client.ClientProtocolException e){
@@ -229,6 +235,9 @@ public class ZenossInterface {
         params.put("eventClass", zap.eventclass); 
         params.put("message", zap.message);
         params.put("eventKey", "GraphiteZenossBridge_" + zap.ID.toString());
+        
+        System.out.println("Sending event to Zenoss");
+        System.out.println(zap.toString());
         
         try {
           return client.execute("sendEvent", new Object[]{params}).toString(); 

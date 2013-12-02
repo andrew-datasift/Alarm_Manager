@@ -32,9 +32,12 @@ public class AlarmManagerState extends TimerTask {
     private String zenoss_username;
     private String zenoss_password;
     private Integer zenoss_port;
+    private String pagerdutykey;
+    private String pagerdutyurl;
 
     private GraphiteInterface graphite;
     private ZenossInterface zenoss;
+    private PagerDuty pagerduty;
     
     // Enabling test mode means alarms are not sent to zenoss, only printed, and all output is forwarded to stdout.
     private boolean testmode = false;
@@ -42,7 +45,7 @@ public class AlarmManagerState extends TimerTask {
     
     /*
      * If graphite recieves a URI with more that 16000 characters it returns a 414 error, so we build up queries shorter than
-     * this length and then store all of these queries in the graphitequeries array. (We don't send >100 seperate requests to graphite for
+     * this length and then store all of these queries in the graphitequeries array. (We don't every alarm as a seperate request to graphite for
      * obvious reasons"
      */
     
@@ -80,10 +83,18 @@ public class AlarmManagerState extends TimerTask {
     // increment or clear IncrementsCounter on the subsequent run.
     HashMap<String, Integer> LastAlarmSeverity = new HashMap<String, Integer>();
     
+    // The sendpageralert flag is set to false at the start of a run. it is set to true when when we get an error from zenoss. If it is true
+    // at the end of a run then we send an alert to pagerduty that there was an error communicating with zenoss.
+    private Boolean sendpageralert = false;
+    
 
     
     @Override
     public void run(){
+        
+        // Set the pager duty flag to false. If it is set to true during the run then there was a problem reaching zenoss so we send an alert to pagerduty.
+        sendpageralert = false;
+        
         Thread.currentThread().setName("Metric_checker");
         logger.debug("============Starting new metrics run.===========");
 
@@ -104,22 +115,44 @@ public class AlarmManagerState extends TimerTask {
             logger.error("Problem parsing array of current alarms.", e);
         }
         logger.debug("=============Metrics run complete metrics.==============");
+        
+        try {
+            ZenossAlarmProperties heartbeat = new ZenossAlarmProperties(2,1000,"graphite","monitoring","/Status","GraphiteAlarmManager heartbeat", "GraphiteAlarmManager heartbeat");
+            zenoss.createEvent(heartbeat);
+        } catch (Exception e) {
+            logger.error("Problem sending heartbeat to zenoss");
+            sendpageralert = true;
+        }
+        
+        if (sendpageralert) {
+            try {
+                logger.error("There was a problem reaching zenoss. Sending an alert to pagerduty");
+                pagerdutyalert("Graphite alarm manager was unable to send an alert to zenoss");
+            } catch (Exception e) {
+                logger.error("There was also an error sending the page to pagerduty. Response:", e);
+            }
+        }
+
+        
     }
     
     // Primary function of the constructor is to parse the config file as provided on the command line
 
+  
     
-    public AlarmManagerState(String configfile, Boolean _testmode) throws Exception {
+    public AlarmManagerState(String configfile, String alarmfile, Boolean _testmode) throws Exception {
         
             JSONParser parser = new JSONParser();
             JSONObject jsonconfig;
+            JSONObject jsonalarms;
             testmode = _testmode;
             
             try {
                 jsonconfig = (JSONObject)parser.parse(new FileReader(configfile));
-                parse_json(jsonconfig);
+                parse_config_json(jsonconfig);
             } catch (ParseException e) {
                 logger.fatal("Cannot parse config file. Quitting.", e);
+                throw e;
             }
 
             // the graphite object holds all details for connecting to graphite
@@ -129,16 +162,129 @@ public class AlarmManagerState extends TimerTask {
             // the zenoss object holds all details for connecting to zenoss
             // and also handles all requests to the zenoss REST API
             zenoss = new ZenossInterface(zenoss_address, zenoss_port, zenoss_username, zenoss_password);
+            
+            // pagerduty is used to send an alarm to the person on call if we cannot reach zenoss
+            pagerduty = new PagerDuty(pagerdutyurl, pagerdutykey);
+            
+            try {
+                jsonalarms = (JSONObject)parser.parse(new FileReader(alarmfile));
+                parse_alarms_json(jsonalarms);
+            } catch (ParseException e) {
+                ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(5,1000,"graphite","monitoring","/Status","TEST: GraphiteAlarmManager cannot parse alarms json file", "TEST: GraphiteAlarmManager cannot parse alarms json file", "0");
+                triggeralarm(graphitealarm);
+                logger.fatal("Cannot parse alarms file. Quitting.", e);
+            }
+            
         
     }
+        
+/*
+ * The configuration for graphite and zenoss is stored in a json file, which is parsed by parse_config_json.
+ * This file is seperate from the file which holds the alarms, this is so that if there is a failure parsing the alarms file
+ * an appropriate alarm can be sent to zenoss.
+ */
     
-    /*
-     * The config input file is in json format.
-     * parse_json reads in the graphite and zenoss details then
-     * loops through the alarms config and creates each of the alarm objects
+    private void parse_config_json (JSONObject JSONroot) {
+        JSONObject config = (JSONObject)JSONroot.get("config");
+        JSONObject graphiteconf = (JSONObject)config.get("graphite");
+        JSONObject zenossconf = (JSONObject)config.get("zenoss");
+        JSONObject pargerdutyconf = (JSONObject)config.get("pagerduty");
+        
+        
+        /* The alarm manager needs to know the current state of alarms to function properly. They are held in memory but also saved to
+         * a file. This section loads them from that file on startup so that it does not loose track of alarms on restart.
+         */
+        String statefilename = "~/.graphitezenossstate";
+        if ((String)config.get("statefile") != null) statefilename=(String)config.get("statefile");
+        statefile = new File(statefilename);
+        
+       
+        try {
+            if (config.get("httpport") != null) httpport = Integer.parseInt(config.get("httpport").toString());
+        } catch (NumberFormatException e) {
+            logger.error("Cannot parse HTTP port value, HTTP API will not be enabled.");
+        }
+        
+        graphite_address = (String)graphiteconf.get("address");
+        graphite_port = Integer.parseInt(graphiteconf.get("port").toString());
+        graphite_username = (String)graphiteconf.get("username");
+        graphite_password = (String)graphiteconf.get("password");
+
+
+        zenoss_address = (String)zenossconf.get("address");
+        zenoss_port = Integer.parseInt(zenossconf.get("port").toString());
+        zenoss_username = (String)zenossconf.get("username");
+        zenoss_password = (String)zenossconf.get("password");
+        
+        pagerdutyurl = (String)pargerdutyconf.get("url");
+        pagerdutykey = (String)pargerdutyconf.get("servicekey");
+    }
+    
+     /*
+     * The alarms file is in json format.
+     * parse_alarms_json loops through the alarms config and creates each of the alarm objects
      * to store them in the alarms hashmap.
      * It also builds up the graphite query which is stored as a string.
+     * The alarms data is in a seperate file so that the alarmmanager can still contact zenoss if there is a problem
+     * reading this file and send an appropriate alarm.
      */
+    
+    private void parse_alarms_json (JSONObject JSONroot){
+        JSONArray alarms = (JSONArray)JSONroot.get("alarms");
+        
+
+        for (int temp = 0; temp < alarms.size(); temp++) {
+            JSONObject thisalarm = (JSONObject)alarms.get(temp);
+            String type = (String)thisalarm.get("type");
+            Alarm tempalarm = new Alarm();
+            try {
+                if (type.equalsIgnoreCase("absolute")) tempalarm = new Absolute_Alarm(thisalarm);          
+                else if (type.equalsIgnoreCase("ROC percent")) tempalarm = new ROC_pc_Alarm(thisalarm);
+                else if (type.equalsIgnoreCase("ROC absolute") || type.equalsIgnoreCase("ROC")) tempalarm = new ROC_abs_Alarm(thisalarm);  
+                else if (type.equalsIgnoreCase("baseline")) tempalarm = new Baseline_Alarm(thisalarm);
+                else if (type.equalsIgnoreCase("holt winters")) tempalarm = new HoltWinters_Alarm(thisalarm);
+                else {logger.error("unrecognised type " + type);}
+                
+                /*
+                 * Each alarm is stored against its ID which is a unique hash of various values. This hash is included in the outgoing
+                 * request to graphite, and is then returned with the results to match it with the alarm that has to process it.
+                 * The alarm object creates its own ID hash, its own part of the search query, and analysis of its own result set.
+                 */
+
+                /*
+                 * In order to minimise load on graphite the data for many alarms is retrieved at once by creating a large query URI
+                 * with multiple search terms. However graphite will return a 414 error if the URI is larger thatn 16000 characters.
+                 * The graphiteinterface class expands the URI slightly by converting some special characters to hex codes, so we limit here to 
+                 * 12000. If adding the latest alarm will make the query larger than 12000 characters then the current string is stored in the
+                 * "graphitequeries" list and a new graphitequery string is started.
+                 */
+                
+                if (tempalarm.active){
+                    AlarmsMap.put(tempalarm.ID,tempalarm);
+                    if ((graphitequery.length() + tempalarm.searchquery.length()) > 5000) {
+                        graphitequeries.add(graphitequery);
+                        graphitequery = "";
+                    }
+                    graphitequery = graphitequery+tempalarm.searchquery; 
+                                      
+
+                }
+                
+            }
+            catch (Exception e) {
+                logger.error("failed to process alarm on \"" + thisalarm.get("path") + "\"", e);
+            }
+         }
+        graphitequeries.add(graphitequery);
+        
+        logger.info("Number of alarms processed: " + AlarmsMap.size());
+        logger.debug(ShowAllAlarms());
+        readstatefromfile();
+        
+        // TODO: go through imported state maps and remove references to alarms that no longer exist.
+    
+
+    }
     
     private void parse_json (JSONObject JSONroot){
         JSONObject config = (JSONObject)JSONroot.get("config");
@@ -240,6 +386,8 @@ public class AlarmManagerState extends TimerTask {
     
 
     public synchronized void checkalarms(String _query){
+        
+
         String query = "/render?" + _query + "&from=-4h&format=json";
         System.out.println(query);
         logger.debug("Sending the following query to graphite:");
@@ -258,7 +406,6 @@ public class AlarmManagerState extends TimerTask {
             triggeralarm(graphitealarm);
             return;
         }
-        
         
         
         //Go through the stored map of alarms with an incresed threshold and clear the value for any with a time in the past.        
@@ -299,15 +446,15 @@ public class AlarmManagerState extends TimerTask {
             
             Integer nonecount = nonevalues(dataset);
             if ((nonecount > 4) && (nonecount >= currentalarm.triggerincrements)) {
-                if (currentalarm.substitute_hostname) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&height=300&width=500&from=-2hours";
+                if (currentalarm.substitute_component) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&height=300&width=500&from=-2hours";
                 else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&height=300&width=500&from=-2hours";
-                ZenossAlarmProperties nodataalarm = new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,currentalarm.getdevicename(target),currentalarm.component,currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true);
+                ZenossAlarmProperties nodataalarm = new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,"Graphite",currentalarm.getcomponent(target),currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true);
                 nodataalarm.message=nodataalarm.message + " <img src='" + graphURL + "' />";
                 nodataalarm.message=nodataalarm.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
                 triggeralarm(nodataalarm);
             }
             else {
-                if ((CurrentAlarms.get(target) != null) && (CurrentAlarms.get(target).nodataalarm)) clearalarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,currentalarm.getdevicename(target),currentalarm.component,currentalarm.event_class,"",target));
+                if ((CurrentAlarms.get(target) != null) && (CurrentAlarms.get(target).nodataalarm)) clearalarm(new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,"Graphite",currentalarm.component,currentalarm.event_class,"",target));
 
 
                 // The alarm object creates a zap object that holds all of the results, even if the alarm is clear.
@@ -324,13 +471,14 @@ public class AlarmManagerState extends TimerTask {
 
     
                 
-                if (currentalarm.substitute_hostname) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&target=alias(threshold(" + threshold + "),\"Threshold\")&height=300&width=500&from=-2hours";
+                if (currentalarm.substitute_component) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&target=alias(threshold(" + threshold + "),\"Threshold\")&height=300&width=500&from=-2hours";
                 else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&target=alias(threshold(" + String.format("%.0f", threshold) + "),\"Threshold\")&height=300&width=500&from=-2hours";
                 zap.message=zap.message + "<br> <img src='" + graphURL + "' />";
                 zap.message=zap.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
                 int alarmlevel = zap.severity;
 
                 int lastseverity = getlastseverity(zap.ID);
+                logger.info("Current counter is " + IncrementsCounter.get(zap.ID));
                 if (lastseverity == zap.severity) incrementcounterforID(zap.ID);
                 else IncrementsCounter.put(zap.ID, 1);
                 int currentcounter = getcountervalue(zap.ID);
@@ -424,6 +572,7 @@ public class AlarmManagerState extends TimerTask {
             if (!zap.ID.equals("0")) CurrentAlarms.put(zap.ID, zap);
         } catch (Exception e) {
             logger.error("Problem sending event to Zenoss for alarm on " + zap.ID, e);
+            sendpageralert = true;
         }
         
     }
@@ -556,7 +705,7 @@ public class AlarmManagerState extends TimerTask {
     
     
     public synchronized String IncreaseThreshold(int AlarmID, Double multiplier, int minutes){
-        String response = "";
+        String response;
         try {
             AlarmsMap.get(AlarmID).set_offset(multiplier);
             Date expiry = new Date(new Date().getTime() + (minutes * 60000));
@@ -601,6 +750,17 @@ public class AlarmManagerState extends TimerTask {
         }
                 
         return count;
+    }
+    
+    private void pagerdutyalert(String message){
+        try {
+            JSONObject response = pagerduty.sendEvent(message);
+            logger.info("Alert sent to pagerduty");
+            logger.info(response.toJSONString());
+        }
+        catch (Exception e) {
+            logger.error("Unable to send event to pagerduty", e);
+        }
     }
     
 }

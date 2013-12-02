@@ -41,7 +41,7 @@ public class Alarm {
     // Threshold offset is used when the alarm manager has been configured to temporarily adjust the threshold
     // of an alarm for a specified time. It can be positive or negative and is added to the threshold when the alarm is called..
     Double threshold_offset = 0.0;
-    Boolean substitute_hostname=false;
+    Boolean substitute_component=false;
     
     // timesList holds all of the time specific thresholds, if any.
     ArrayList<AlarmTime> timesList = new ArrayList<AlarmTime>();
@@ -122,7 +122,7 @@ public class Alarm {
         
         if (path.contains("$$")){
             searchquery="&target=aliasSub(" + path.replaceAll("\\$\\$", "*") + ",\"^\",\"" + ID + "_\")";
-            substitute_hostname=true;
+            substitute_component=true;
         } else {
             searchquery="&target=aliasSub(" + path + ",\"^\",\"" + ID + "_\")";
         }
@@ -241,9 +241,10 @@ public class Alarm {
      */
     
     public ZenossAlarmProperties checkalarm(JSONObject dataset){
-        String device = getdevicename( (String)dataset.get("target") );
-        Integer uniqueID = ID + device.hashCode();
-        if (checkfornodata(dataset)) return new ZenossAlarmProperties(3,prodState,"graphite_alarm_manager",component,event_class,summary + " returned too many none values",uniqueID.toString());
+     
+        String uniquecomponent = getcomponent((String)dataset.get("target"));
+        String uniqueID = ID.toString() + "_" + uniquecomponent;
+        if (checkfornodata(dataset)) return new ZenossAlarmProperties(3,prodState,"Graphite",uniquecomponent,event_class,summary + " returned too many none values",uniqueID.toString());
         return processresponse(dataset);
     }
 
@@ -307,9 +308,12 @@ public class Alarm {
      * which will be the hostname to which the data applies.
      */
     
-    public String getdevicename(String target){
-        if (!path.contains("$$")){
-            return "graphite";
+
+    
+    public String getcomponent(String target){
+        
+        if (!substitute_component){
+            return component;
         }
         
         String[] patharray = path.split("\\.");
@@ -319,7 +323,10 @@ public class Alarm {
             if (field.contains("$$")) break;
             i++;
         }
-        return targetarray[i];
+        
+        return targetarray[i] + "_" + component;
+        
+
         
     }
     
