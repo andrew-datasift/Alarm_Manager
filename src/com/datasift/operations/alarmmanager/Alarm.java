@@ -24,8 +24,8 @@ public class Alarm {
     Integer prodState = 1000;
     Boolean greater_than;
     String path;
-    Integer triggerincrements;
-    Integer clearincrements;
+    Integer triggerincrements = 1;
+    Integer clearincrements = 1;
     Boolean active;
     
     // nodataseverity is the severity of the alarm that is triggered if there is no data from graphite.
@@ -90,8 +90,8 @@ public class Alarm {
                 else summary=(String)alarmconfig.get("summary");
         
         description=(String)alarmconfig.get("description");
-        triggerincrements=Integer.parseInt(alarmconfig.get("trigger_increments").toString());
-        clearincrements=Integer.parseInt(alarmconfig.get("clear_increments").toString());
+        if (alarmconfig.get("trigger_increments") != null) triggerincrements=Integer.parseInt(alarmconfig.get("trigger_increments").toString());
+        if (alarmconfig.get("clear_increments") != null) clearincrements=Integer.parseInt(alarmconfig.get("clear_increments").toString());
         
         if (alarmconfig.get("event_class") != null) event_class=(String)alarmconfig.get("event_class");
         
@@ -178,6 +178,9 @@ public class Alarm {
             logger.error("Error parsing alarm for " + path + "value for trigger_increments could not be read.", e);
             throw new Exception("Unacceptable value for \"trigger_increments\" in alarm on " + path);
             }
+        catch (NullPointerException e) {
+            triggerincrements = 1;
+        }
         
         try { clearincrements=Integer.parseInt(alarmconfig.get("clear_increments").toString()); }
         catch (NumberFormatException e)
@@ -185,6 +188,9 @@ public class Alarm {
             logger.error("Error parsing alarm for " + path + "value for trigger_increments could not be read.", e);
             throw new Exception("Unacceptable value for \"clear_increments\" in alarm on " + path);
             }
+        catch (NullPointerException e) {
+            clearincrements = 1;
+        }
         
         
             

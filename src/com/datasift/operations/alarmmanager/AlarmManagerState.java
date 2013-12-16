@@ -1,6 +1,7 @@
 package com.datasift.operations.alarmmanager;
 import java.io.FileReader;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.TimerTask;
@@ -82,6 +83,11 @@ public class AlarmManagerState extends TimerTask {
     // LastAlarmSeverity stores the severity that each alarm triggered during the previous run. This information is used to either
     // increment or clear IncrementsCounter on the subsequent run.
     HashMap<String, Integer> LastAlarmSeverity = new HashMap<String, Integer>();
+    
+    // The EventClasses hashset contains all of the event classes that appear in the config. We build it up as the alarms are parsed then check
+    // zenoss to make sure they all exist. Alarms sent on event classes that do not exist will be capped at info level. If this is the case for any alarms
+    // an invalid config alarm is triggered.
+    HashSet<String> EventClasses = new HashSet<String>();
     
     // The sendpageralert flag is set to false at the start of a run. it is set to true when when we get an error from zenoss. If it is true
     // at the end of a run then we send an alert to pagerduty that there was an error communicating with zenoss.
@@ -229,7 +235,7 @@ public class AlarmManagerState extends TimerTask {
      * reading this file and send an appropriate alarm.
      */
     
-    private void parse_alarms_json (JSONObject JSONroot){
+    private void parse_alarms_json (JSONObject JSONroot) throws Exception{
         JSONArray alarms = (JSONArray)JSONroot.get("alarms");
         
 
@@ -261,6 +267,7 @@ public class AlarmManagerState extends TimerTask {
                 
                 if (tempalarm.active){
                     AlarmsMap.put(tempalarm.ID,tempalarm);
+                    if (tempalarm.event_class != "/Status") EventClasses.add(tempalarm.event_class);
                     if ((graphitequery.length() + tempalarm.searchquery.length()) > 5000) {
                         graphitequeries.add(graphitequery);
                         graphitequery = "";
@@ -276,6 +283,20 @@ public class AlarmManagerState extends TimerTask {
             }
          }
         graphitequeries.add(graphitequery);
+        
+        
+        
+        for (String eventclass:EventClasses){
+            logger.info("Checking zenoss for event class " + eventclass);
+            if (!zenoss.checkEventClass(eventclass)){
+                ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(4,1000,"alarmmanager","monitoring","/Status","Invalid event class found: " + eventclass, "The event class " + eventclass + "appears in the alarms file but does not exist in zenoss.", "0");
+                triggeralarm(graphitealarm);
+                logger.error("Event class " + eventclass + " not found in zenoss. Alarms may not produce the correct severity.");
+                            
+            } else {
+                logger.info("success");
+            }
+        }
         
         logger.info("Number of alarms processed: " + AlarmsMap.size());
         logger.debug(ShowAllAlarms());
@@ -388,7 +409,7 @@ public class AlarmManagerState extends TimerTask {
     public synchronized void checkalarms(String _query){
         
 
-        String query = "/render?" + _query + "&from=-4h&format=json";
+        String query = "/render?" + _query + "&from=-2h&format=json";
         System.out.println(query);
         logger.debug("Sending the following query to graphite:");
         logger.debug(query);
@@ -478,7 +499,7 @@ public class AlarmManagerState extends TimerTask {
                 int alarmlevel = zap.severity;
 
                 int lastseverity = getlastseverity(zap.ID);
-                logger.info("Current counter is " + IncrementsCounter.get(zap.ID));
+                logger.info("Current counter is " + IncrementsCounter.get(zap.ID) + " for " + zap.ID);
                 if (lastseverity == zap.severity) incrementcounterforID(zap.ID);
                 else IncrementsCounter.put(zap.ID, 1);
                 int currentcounter = getcountervalue(zap.ID);

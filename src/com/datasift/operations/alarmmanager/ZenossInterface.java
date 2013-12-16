@@ -10,6 +10,7 @@ import org.apache.http.NameValuePair;
 import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.DefaultHttpClient;
@@ -66,6 +67,7 @@ public class ZenossInterface {
         ZENOSS_INSTANCE = address + ":" + port;
         ZENOSS_USERNAME = username;
         ZENOSS_PASSWORD = password;
+        
 
         
         HttpPost httpost = new HttpPost(ZENOSS_INSTANCE +
@@ -175,6 +177,64 @@ public class ZenossInterface {
                                                "query", data).get("result");
     }
     
+    public JSONObject getDevices(String deviceClass) throws Exception {
+        HashMap data = new HashMap();
+        data.put("uid", deviceClass);
+        data.put("params", new HashMap());
+
+        return (JSONObject) this.routerRequest("DeviceRouter",
+                                               "getDevices", data).get("result");
+    }
+
+    public JSONObject getDevices() throws Exception {
+        return this.getDevices("/zport/dmd/Devices");
+    }
+    
+    
+   public Boolean checkEventClass(String eventclass)
+            throws Exception {
+        // Construct standard URL for requests
+        String router = "DeviceRouter";
+        String method = "getCollectors";
+        HashMap data = new HashMap();
+        //data.put("uid", "/zport/dmd/Devices");
+        //data.put("params", new HashMap());
+             
+        HttpPost httpost = new HttpPost(ZENOSS_INSTANCE +  "/zport/dmd/Events" + eventclass + "/" +
+                            ROUTERS.get(router) + "_router");
+        // Content-type MUST be set to 'application/json'
+        httpost.addHeader("Content-type", "application/json; charset=utf-8");
+
+        ArrayList packagedData = new ArrayList();
+        packagedData.add(data);
+
+        HashMap reqData = new HashMap();
+        reqData.put("action", router);
+        reqData.put("method", method);
+        reqData.put("data", packagedData);
+        reqData.put("type", "rpc");
+        // Increment the request count ('tid'). More important if sending multiple
+        // calls in a single request
+        reqData.put("tid", String.valueOf(this.reqCount++));
+
+        // Set the POST content to be a JSON-serialized version of request data
+        httpost.setEntity(new StringEntity(JSONValue.toJSONString(reqData)));
+
+        // Execute the request, and return the JSON-deserialized data
+        
+        try {
+        String response = httpclient.execute(httpost, responseHandler);
+        } catch (org.apache.http.client.HttpResponseException e) {
+            return false;
+        } 
+
+        return true;
+    }
+    
+    public Boolean EventClassExists(String eventclass) throws Exception {
+        return true;
+
+    }
     
     
     public JSONObject getEvents(String device, String component, String eventClass)
@@ -200,6 +260,7 @@ public class ZenossInterface {
         return (JSONObject) this.routerRequest("EventsRouter",
                                                "query", data).get("result");
     }
+    
     
 
     public JSONObject getEvents() throws Exception {
