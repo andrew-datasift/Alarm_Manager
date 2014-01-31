@@ -13,13 +13,14 @@ import org.apache.log4j.Logger;
 
 
 public class Alarm {
-    private static Logger logger = Logger.getLogger("AlarmManager.Alarm");
+    static Logger logger = Logger.getLogger("AlarmManager.Alarm");
     // These are all of the attribures which are defined in the config file for the alarm
     String name;
     String type;
     String description;
     String summary;
     String component;
+    String wikilink;
     String event_class = "/Status";
     Integer prodState = 1000;
     Boolean greater_than;
@@ -88,6 +89,9 @@ public class Alarm {
         
         if (alarmconfig.get("summary") == null) summary = name;
                 else summary=(String)alarmconfig.get("summary");
+        
+        if (alarmconfig.get("wiki_link") == null) wikilink = null;
+                else wikilink=(String)alarmconfig.get("wiki_link");
         
         description=(String)alarmconfig.get("description");
         if (alarmconfig.get("trigger_increments") != null) triggerincrements=Integer.parseInt(alarmconfig.get("trigger_increments").toString());
@@ -239,6 +243,11 @@ public class Alarm {
         return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID.toString());
     }
     
+    public ZenossAlarmProperties processalarm(JSONObject dataset){
+        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
+        return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID.toString());
+    }
+    
     /*
      * checkalarm is a wrapper method. This will be called in order to generate an alarm from a set of graphite data.
      * This method will then perform any standard functions, such as checking the validity of the dataset, then call the
@@ -322,15 +331,24 @@ public class Alarm {
             return component;
         }
         
-        String[] patharray = path.split("\\.");
-        String[] targetarray = target.split("\\.");
-        int i = 0;
-        for (String field:patharray){
-            if (field.contains("$$")) break;
-            i++;
-        }
+        System.out.println(path);
+        System.out.println(target);
         
-        return targetarray[i] + "_" + component;
+        // This is in a try catch block because certain modifiers in graphite (eg groupbynode) change the returned path
+        // so that it doesn't contain the right number of fields. In cases like this we just return the normal component.
+        try {
+            String[] patharray = path.split("\\.");
+            String[] targetarray = target.split("\\.");
+            int i = 0;
+            for (String field:patharray){
+                if (field.contains("$$")) break;
+                i++;
+            }
+
+            return targetarray[i] + "_" + component;
+        } catch (Exception e) {
+            return component;
+        }
         
 
         

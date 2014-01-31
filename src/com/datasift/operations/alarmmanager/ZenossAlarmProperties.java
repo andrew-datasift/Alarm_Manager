@@ -76,9 +76,9 @@ public class ZenossAlarmProperties implements java.io.Serializable {
         s = s + "\"component\": \"" + component + "\",";
         s = s + "\"eventclass\": \"" + eventclass + "\",";
         s = s + "\"summary\": \"" + summary + "\",";
-        s = s + "\"message\": \"" + message + "\",";
-        s = s + "\"ID\": \"" + ID + "\",";
-        s = s + "\"nodataalarm\": \"" + nodataalarm + "\"}";
+        if (nodataalarm) s = s + "\"nodataalarm\": \"" + nodataalarm + "\",";
+        s = s + "\"ID\": \"" + ID + "\"}";
+
         
         return s;
     }

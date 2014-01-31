@@ -1,5 +1,6 @@
 
 package com.datasift.operations.alarmmanager;
+import static com.datasift.operations.alarmmanager.Alarm.logger;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
 /**
@@ -56,10 +57,12 @@ public class Absolute_Alarm extends Alarm{
         return zap;
     }
     
+    @Override
     public ZenossAlarmProperties processalarm(JSONObject dataset){
         String uniquecomponent = getcomponent((String)dataset.get("target"));
-        String uniqueID = ID.toString() + "_" + uniquecomponent;
-        ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,"Graphite",uniquecomponent,event_class,summary,uniqueID);
+        //String uniqueID = ID.toString() + "_" + uniquecomponent;
+        String target = (String)dataset.get("target");
+        ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,"Graphite",uniquecomponent,event_class,summary,target);
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
 
         
@@ -69,17 +72,34 @@ public class Absolute_Alarm extends Alarm{
         
         boolean clear = true;
         
+        if ((datapoints.size() < clearincrements+1) || (datapoints.size() < triggerincrements+1)){
+            zap.summary = ("Graphite did not return enough data to process alarm. See message for details");
+            zap.message = ("Graphite did not return enough data to process alarm. Metric path in config: " + path + ". Metric path returned: " + target);
+            zap.severity = 4;
+            return zap;
+        }
+        
         // Alarms are most likely to be clear, so check for a clear alarm first
-        for (int i=1; i<=(clearincrements+1); i++){
+        for (int i=2; i<=(clearincrements+1); i++){
             JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
-            Double currentvalue = new Double(currentdatapoint.get(0).toString());
-            if (currentvalue > localthresholds[0]) {
+            System.out.println(currentdatapoint);
+            if (currentdatapoint.get(0) != null) {
+                Double currentvalue = new Double(currentdatapoint.get(0).toString());
+                if ( (greater_than && (currentvalue >= localthresholds[0])) || (!greater_than && (currentvalue <= localthresholds[0])) ) {
+                    clear = false;
+                    break;
+                }
+            }
+            else {
                 clear = false;
                 break;
             }
+            
+
         }
         
         // if none of the values are above the clear threshold then return with clear severity (-1)
+        if (clear)  System.out.println("alarm is clear");
         if (clear) return zap;
         
         boolean breached;
@@ -93,14 +113,24 @@ public class Absolute_Alarm extends Alarm{
         for (int i=1; i<=5; i++){
             if (localthresholds[localthresholds.length-i] != null){
                 Double threshold = localthresholds[localthresholds.length-i];
+                logger.debug("Checking severity " + (localthresholds.length-i) + " = " + threshold);
                 breached = true;
-                for (int x=1; x<=(triggerincrements+1); x++){
+                for (int x=2; x<=(triggerincrements+1); x++){
                     JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-x);
-                    Double currentvalue = new Double(currentdatapoint.get(0).toString());
-                    if (currentvalue < threshold) {
-                       breached = false;
-                       break;
-                   }
+                    if (currentdatapoint.get(0) != null){
+                        Double currentvalue = new Double(currentdatapoint.get(0).toString());
+                        if ( (greater_than && (currentvalue <= threshold)) || (!greater_than && (currentvalue >= threshold)) ) {
+                            breached = false;
+                            logger.debug("Severity is not breached");
+                            break;
+                        }
+                    }
+                    else {
+                        breached = false;
+                        logger.debug("Severity is not breached");
+                        break;
+                    }
+
                 }
                 if (breached) {
                     severity = thresholds.length-i;
@@ -110,9 +140,16 @@ public class Absolute_Alarm extends Alarm{
 
         }
         
+        Double latestmeasurement = null;
+        for (int i=2; i<datapoints.size(); i++){
+            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
+            if (currentdatapoint.get(0) != null){
+                latestmeasurement = new Double(currentdatapoint.get(0).toString());
+                break;
+            }
+        }
+        
         zap.severity=severity;
-        JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-1);
-        Double latestmeasurement = new Double(currentdatapoint.get(0).toString());
         
 
         if (zap.severity == -1) return zap;
