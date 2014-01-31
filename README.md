@@ -50,6 +50,7 @@ The HTTP port is used for the API detailed below. If the requested port is unava
 		"event_class": "/Status",
 		"summary": "Average number of reader events processed",
 		"description": "The average number of events processed by the reader module across all servers",
+		"wiki_link": "https://jiradatasift.atlassian.net/wiki/",
 		"trigger_increments": 10,
 		"clear_increments": 5,
 		"clear": 10000,
@@ -82,6 +83,7 @@ Each entry in the alarms array is a tuple containing the following values (If a 
 * 'event_class' - String that will be used to populate the event class field of the zenoss alarm (default: "/Status").
 * 'summary' - String that prefixes the current value and threshold in the summary field of the alarm (default: the alarm name)
 * 'description' - A plain text description value for reference only. Can be used to include helpful information for dealing with alarm, or any other useful info.
+* 'wiki_link' - A link to a useful page (eg wiki article or jira ticket) to help with resolving the alert.
 * 'trigger_increments' - the number of times the metric must breach the threshold to activate the alarm (requrired).
 * 'clear_increments' - the number of times the metric must be below the clear threshold for an alarm to be cleared (requrired).
 * 'threshold_type' - "max" or "min". If max then alarm is triggered if the value is above the threshold, if min then triggered when below. (default: min)
