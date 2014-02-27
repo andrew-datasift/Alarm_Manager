@@ -173,6 +173,7 @@ public class GraphiteInterface {
         cleanURL = cleanURL.replace(")","%29");
         cleanURL = cleanURL.replace("{","%7b");
         cleanURL = cleanURL.replace("}","%7d");
+        cleanURL = cleanURL.replace("|","%7c");
         cleanURL = cleanURL.replace(" ","");
         return cleanURL;
     }

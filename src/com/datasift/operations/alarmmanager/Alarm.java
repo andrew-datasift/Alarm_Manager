@@ -40,7 +40,7 @@ public class Alarm {
     Integer ID;
     
     // Threshold offset is used when the alarm manager has been configured to temporarily adjust the threshold
-    // of an alarm for a specified time. It can be positive or negative and is added to the threshold when the alarm is called..
+    // of an alarm for a specified time. It can be positive or negative and is added to the threshold when the alarm is called.
     Double threshold_offset = 0.0;
     Boolean substitute_component=false;
     
@@ -331,8 +331,6 @@ public class Alarm {
             return component;
         }
         
-        System.out.println(path);
-        System.out.println(target);
         
         // This is in a try catch block because certain modifiers in graphite (eg groupbynode) change the returned path
         // so that it doesn't contain the right number of fields. In cases like this we just return the normal component.

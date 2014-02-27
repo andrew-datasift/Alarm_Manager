@@ -430,7 +430,6 @@ public class AlarmManagerState extends TimerTask {
         
 
         String query = "/render?" + _query + "&from=-2h&format=json";
-        System.out.println(query);
         logger.debug("Sending the following query to graphite:");
         logger.debug(query);
         JSONArray response = new JSONArray();
@@ -581,7 +580,6 @@ public class AlarmManagerState extends TimerTask {
         
 
         String query = "/render?" + _query + "&from=-2h&format=json";
-        System.out.println(query);
         logger.debug("Sending the following query to graphite:");
         logger.debug(query);
         JSONArray response;
@@ -625,7 +623,6 @@ public class AlarmManagerState extends TimerTask {
 
         for (Object i:response){
 
-            System.out.println("\n\n\n\n");
             JSONObject dataset = (JSONObject)i;
             try {
             process_response_for_alarm(dataset);
@@ -651,7 +648,6 @@ public class AlarmManagerState extends TimerTask {
     
     
     private void process_response_for_alarm(JSONObject dataset) throws Exception{
-            System.out.println("\n\n\n\n");
             
             String target = ((String)dataset.get("target"));
             logger.debug("response for " + target);
@@ -697,9 +693,8 @@ public class AlarmManagerState extends TimerTask {
                 }
 
     
-                
-                if (currentalarm.substitute_component) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&target=alias(threshold(" + threshold + "),\"Threshold\")&height=300&width=500&from=-2hours";
-                else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&target=alias(threshold(" + String.format("%.0f", threshold) + "),\"Threshold\")&height=300&width=500&from=-2hours";
+                String graphpath = currentalarm.path.replaceAll("\\$\\$", "*");
+                graphURL = "https://graphite.sysms.net/render/?target=" + graphpath + "&target=alias(threshold(" + String.format("%.0f", threshold) + "),\"Threshold\")&height=300&width=500&from=-2hours";
                 zap.message=zap.message + "<br> <img src='" + graphURL + "' />";
                 zap.message=zap.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
                 zap.message=zap.message + linkmessage;
@@ -925,7 +920,7 @@ public class AlarmManagerState extends TimerTask {
             IncreasedThresholdValues.put(AlarmID, multiplier);
             response = "{\"success\": true, \"response\": \"Offset for alarm " + AlarmID + " set to " + multiplier + " for " + minutes + " minutes.\"}";
         } catch (NullPointerException e) {
-            response = "{\"success\": false, \"response\": \"Offset setting multiplier for alarm " + AlarmID + ". Alarm not found\"}";
+            response = "{\"success\": false, \"response\": \"Offset setting for alarm " + AlarmID + ". Alarm not found\"}";
             logger.error(response);
         }
         savestatetofile();

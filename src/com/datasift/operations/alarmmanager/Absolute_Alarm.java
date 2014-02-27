@@ -8,7 +8,7 @@ import org.json.simple.JSONArray;
  * Absolute_Alarm is a simple threshold check which alarms if the latest current value is above or below the threshold.
  */
 public class Absolute_Alarm extends Alarm{
-
+    static org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger("AlarmManager.Alarm");
     
     public Absolute_Alarm(JSONObject thisalarm) throws Exception{
         GetCommonElements(thisalarm);
@@ -82,7 +82,7 @@ public class Absolute_Alarm extends Alarm{
         // Alarms are most likely to be clear, so check for a clear alarm first
         for (int i=2; i<=(clearincrements+1); i++){
             JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
-            System.out.println(currentdatapoint);
+            logger.info(currentdatapoint);
             if (currentdatapoint.get(0) != null) {
                 Double currentvalue = new Double(currentdatapoint.get(0).toString());
                 if ( (greater_than && (currentvalue >= localthresholds[0])) || (!greater_than && (currentvalue <= localthresholds[0])) ) {
@@ -99,7 +99,7 @@ public class Absolute_Alarm extends Alarm{
         }
         
         // if none of the values are above the clear threshold then return with clear severity (-1)
-        if (clear)  System.out.println("alarm is clear");
+        if (clear) logger.info("alarm is clear");
         if (clear) return zap;
         
         boolean breached;
