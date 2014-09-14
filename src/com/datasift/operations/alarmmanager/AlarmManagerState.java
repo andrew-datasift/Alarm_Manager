@@ -20,6 +20,7 @@ import java.util.Iterator;
 import java.util.Date;
 import org.apache.log4j.Logger;
 import java.util.concurrent.ConcurrentHashMap;
+import java.net.URLEncoder;
 
 public class AlarmManagerState extends TimerTask {
     
@@ -487,7 +488,8 @@ public class AlarmManagerState extends TimerTask {
      
             
             Integer nonecount = nonevalues(dataset);
-            if ((nonecount > 4) && (nonecount >= currentalarm.triggerincrements)) {
+            logger.debug("nodata override = " + currentalarm.nodataoverride);
+            if ((nonecount > 4) && (nonecount >= currentalarm.triggerincrements) && (nonecount > currentalarm.nodataoverride)) {
                 if (currentalarm.substitute_component) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&height=300&width=500&from=-2hours";
                 else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&height=300&width=500&from=-2hours";
                 ZenossAlarmProperties nodataalarm = new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,"Graphite",currentalarm.getcomponent(target),currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true);
@@ -578,7 +580,7 @@ public class AlarmManagerState extends TimerTask {
     
     public synchronized void checkalarms(String _query){
         
-
+        
         String query = "/render?" + _query + "&from=-2h&format=json";
         logger.debug("Sending the following query to graphite:");
         logger.debug(query);
@@ -667,7 +669,7 @@ public class AlarmManagerState extends TimerTask {
      
             
             Integer nonecount = nonevalues(dataset);
-            if (((nonecount > 4) && (nonecount >= currentalarm.triggerincrements)) ) {
+            if (((nonecount > 4) && (nonecount >= currentalarm.triggerincrements) && (nonecount > currentalarm.nodataoverride)) ) {
                 if (currentalarm.substitute_component) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&height=300&width=500&from=-2hours";
                 else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&height=300&width=500&from=-2hours";
                 ZenossAlarmProperties nodataalarm = new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,"Graphite",currentalarm.getcomponent(target),currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true);
@@ -960,13 +962,15 @@ public class AlarmManagerState extends TimerTask {
     }
     
     private void pagerdutyalert(String message){
-        try {
-            JSONObject response = pagerduty.sendEvent(message);
-            logger.info("Alert sent to pagerduty");
-            logger.info(response.toJSONString());
-        }
-        catch (Exception e) {
-            logger.error("Unable to send event to pagerduty", e);
+        if (!testmode) {
+            try {
+                JSONObject response = pagerduty.sendEvent(message);
+                logger.info("Alert sent to pagerduty");
+                logger.info(response.toJSONString());
+            }
+            catch (Exception e) {
+                logger.error("Unable to send event to pagerduty", e);
+            }
         }
     }
     

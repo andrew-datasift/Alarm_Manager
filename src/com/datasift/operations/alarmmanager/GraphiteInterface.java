@@ -161,7 +161,8 @@ public class GraphiteInterface {
     
     /*
      * Cleanup URL is neccessary because the apache HTTP library used here does not handle special characters
-     * well in outgoing requests. Thus the ascii code is used for each of the characters below.
+     * well in outgoing requests. I tried various URI encoders and all of them resulted in graphite throwing parse
+     * errors, so this is what we have and it works, even though it is rather messy.
      */
     
     private String cleanupURL(String dirtyURL){

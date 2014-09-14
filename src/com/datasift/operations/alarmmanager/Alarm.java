@@ -25,6 +25,7 @@ public class Alarm {
     Integer prodState = 1000;
     Boolean greater_than;
     String path;
+    Integer nodataoverride = 4;
     Integer triggerincrements = 1;
     Integer clearincrements = 1;
     Boolean active;
@@ -94,6 +95,7 @@ public class Alarm {
                 else wikilink=(String)alarmconfig.get("wiki_link");
         
         description=(String)alarmconfig.get("description");
+        if (alarmconfig.get("no_data_override") != null) nodataoverride=Integer.parseInt(alarmconfig.get("no_data_override").toString());
         if (alarmconfig.get("trigger_increments") != null) triggerincrements=Integer.parseInt(alarmconfig.get("trigger_increments").toString());
         if (alarmconfig.get("clear_increments") != null) clearincrements=Integer.parseInt(alarmconfig.get("clear_increments").toString());
         
@@ -283,6 +285,8 @@ public class Alarm {
            }
            
         }
+        
+        logger.debug("Alarm " + this.ID + " has not triggered. Clear threshold is: " + localthresholds[0]);
         
         if (greater_than) {
             if ( latestmeasurement <= (localthresholds[0] + threshold_offset)) return 0;

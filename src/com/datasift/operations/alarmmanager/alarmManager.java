@@ -6,6 +6,7 @@ import org.apache.log4j.PropertyConfigurator;
 import org.json.simple.JSONObject;
 
 
+
 /*
  * This is the main class called when running the alarm manager.
  * It parses the command line arguments for the config file then creates a new AlarmManagerState
@@ -32,6 +33,7 @@ public class alarmManager {
         int interval = 60000;
         boolean testmode = false;
         PropertyConfigurator.configure(System.getProperty("log4j.configuration"));
+        
         
         /* 
          * Parse command line arguments

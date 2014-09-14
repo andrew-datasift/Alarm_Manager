@@ -34,7 +34,7 @@ public class Absolute_Alarm extends Alarm{
         
         /*
          * The latest datapoint is often null as not all graphite inputs report at the same time.
-         * Thus we work back through the dataset. If the set contains only null values the alarmmanager should have generates an error
+         * Thus we work back through the dataset. If the set contains only null values the alarmmanager should generate an error
          * before this point, so we handle that case by returning a clear value.
          */
         
@@ -85,7 +85,7 @@ public class Absolute_Alarm extends Alarm{
             logger.info(currentdatapoint);
             if (currentdatapoint.get(0) != null) {
                 Double currentvalue = new Double(currentdatapoint.get(0).toString());
-                if ( (greater_than && (currentvalue >= localthresholds[0])) || (!greater_than && (currentvalue <= localthresholds[0])) ) {
+                if ( (greater_than && (currentvalue > localthresholds[0])) || (!greater_than && (currentvalue < localthresholds[0])) ) {
                     clear = false;
                     break;
                 }
