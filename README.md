@@ -10,13 +10,10 @@ Configuration
 
 The alarm generator takes its configuration from a file in json format which is passed using the -c command line argument and is read on startup. Logging is configured seperately via log4j (see logging section below).
 
-An example configuration file is included in the repository which, combined with this document, should make the configuration schema clear.
+Example configuration files are included in the repository which, combined with this document, should make the configuration schema clear.
 
-At the top level the json object is split into two sections:
-* 'config' - Details for connecting to graphite and zenoss, as well as the location of a state file for persisting information
-* 'alarms' - An array containing each of the alarms that will be handled by the application.
 
-### 'config' section
+### Primary config file
 
 	"config": {
 		"graphite": {
@@ -32,15 +29,21 @@ At the top level the json object is split into two sections:
 			"password": "xxxyyyzzz"
 		},
 		"statefile": "/opt/alarmmanager/.graphitezenossstate",
-		"httpport": 8080 
+		"httpport": 8080,
+		"alarms_dir": "/opt/alarmmanager/alarms.d"
 	},
 
 This sections for zenoss and graphite should be self explanatory. They both communicate via HTTP and will assume basic auth via http unless "https" is prepended to the address.
 The statefile is used to store the current state of the alarm manager so that it can keep track of triggered alarms, suspended metrics, etc, past restarts.
 The HTTP port is used for the API detailed below. If the requested port is unavailable or no port is given then a warning will be printed in the log but execution will not be affected.
+alarms_dir gives the path of a directory that contains json files which contain the alarm definitions. The alarmmanager will attempt to parse all of the files in this directory, if any of them cannot be successfully parsed it will report an error and move on to the next file.
 
-### 'alarms' section
+### Alarms config files
 
+Alarms are configured in one or more files in the alarm definition directory. Each contains a top level array called "alarms" which has one or more alarms in this format:
+
+{
+    "alarms": [
 	{
 		"active": true,
 		"name": "Read events average",
@@ -70,7 +73,9 @@ The HTTP port is used for the API detailed below. If the requested port is unava
 		"window": 30,
 		"severity3": 100,
 		"threshold_type": "max"
-	},
+	}
+   }
+}
 
 
 Each entry in the alarms array is a tuple containing the following values (If a default is given the value is not required):
