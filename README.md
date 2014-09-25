@@ -42,40 +42,40 @@ alarms_dir gives the path of a directory that contains json files which contain 
 
 Alarms are configured in one or more files in the alarm definition directory. Each contains a top level array called "alarms" which has one or more alarms in this format:
 
-{
-    "alarms": [
 	{
-		"active": true,
-		"name": "Read events average",
-		"path": "average(devices.servers.*.reader.events_processed)",
-		"type": "absolute",
-		"component": "graphite",
-		"event_class": "/Status",
-		"summary": "Average number of reader events processed",
-		"description": "The average number of events processed by the reader module across all servers",
-		"wiki_link": "https://jiradatasift.atlassian.net/wiki/",
-		"trigger_increments": 10,
-		"clear_increments": 5,
-		"clear": 10000,
-		"severity3": 8000,
-		"severity4": 5000,
-		"threshold_type": "min"
-	},
-	{
-		"active": true,
-		"name": "Growth of space used by mysql database on db1",
-		"path": "services.mysql.db1.space_used",
-		"type": "ROC absolute",
-		"component": "graphite",
-		"event_class": "/Status",
-		"trigger_increments": 5,
-		"clear_increments": 5,
-		"window": 30,
-		"severity3": 100,
-		"threshold_type": "max"
+	"alarms": [
+		{
+			"active": true,
+			"name": "Read events average",
+			"path": "average(devices.servers.*.reader.events_processed)",
+			"type": "absolute",
+			"component": "graphite",
+			"event_class": "/Status",
+			"summary": "Average number of reader events processed",
+			"description": "The average number of events processed by the reader module across all servers",
+			"wiki_link": "https://jiradatasift.atlassian.net/wiki/",
+			"trigger_increments": 10,
+			"clear_increments": 5,
+			"clear": 10000,
+			"severity3": 8000,
+			"severity4": 5000,
+			"threshold_type": "min"
+		},
+		{
+			"active": true,
+			"name": "Growth of space used by mysql database on db1",
+			"path": "services.mysql.db1.space_used",
+			"type": "ROC absolute",
+			"component": "graphite",
+			"event_class": "/Status",
+			"trigger_increments": 5,
+			"clear_increments": 5,
+			"window": 30,
+			"severity3": 100,
+			"threshold_type": "max"
+		}
+	]
 	}
-   }
-}
 
 
 Each entry in the alarms array is a tuple containing the following values (If a default is given the value is not required):
