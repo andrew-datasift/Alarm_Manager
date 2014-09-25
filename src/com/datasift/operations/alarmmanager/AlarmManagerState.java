@@ -37,6 +37,7 @@ public class AlarmManagerState extends TimerTask {
     private Integer zenoss_port;
     private String pagerdutykey;
     private String pagerdutyurl;
+    private String alarms_dir;
 
     private GraphiteInterface graphite;
     private ZenossInterface zenoss;
@@ -149,11 +150,10 @@ public class AlarmManagerState extends TimerTask {
 
   
     
-    public AlarmManagerState(String configfile, String alarmfile, Boolean _testmode) throws Exception {
+    public AlarmManagerState(String configfile, Boolean _testmode) throws Exception {
         
             JSONParser parser = new JSONParser();
             JSONObject jsonconfig;
-            JSONObject jsonalarms;
             testmode = _testmode;
             
             try {
@@ -175,13 +175,50 @@ public class AlarmManagerState extends TimerTask {
             // pagerduty is used to send an alarm to the person on call if we cannot reach zenoss
             pagerduty = new PagerDuty(pagerdutyurl, pagerdutykey);
             
-            try {
-                jsonalarms = (JSONObject)parser.parse(new FileReader(alarmfile));
-                parse_alarms_json(jsonalarms);
-            } catch (ParseException e) {
-                ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(5,1000,"graphite","monitoring","/Status","GraphiteAlarmManager cannot parse alarms json file", "GraphiteAlarmManager cannot parse alarms json file", "0");
-                triggeralarm(graphitealarm);
-                logger.fatal("Cannot parse alarms file. Quitting.", e);
+            File directory = new File(alarms_dir);
+            if (!directory.isDirectory()) throw new Exception("Alarms directory in config is not a directory");
+            if (directory.list().length == 0) throw new Exception("Alarms directory is empty");
+            
+            
+            for (File currentfile : directory.listFiles()) {
+                try {
+                    parse_alarms_file(currentfile);
+                } catch (ParseException e) {
+                    ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(5,1000,"graphite","monitoring","/Status","GraphiteAlarmManager cannot parse alarms json file", "GraphiteAlarmManager cannot parse alarms json file", "0");
+                    triggeralarm(graphitealarm);
+                    logger.error("Cannot parse alarms file " + currentfile.getName() + ". Continuing with other files", e);
+                }
+            }
+            
+            
+            for (String eventclass:EventClasses){
+                logger.info("Checking zenoss for event class " + eventclass);
+                if (!zenoss.checkEventClass(eventclass)){
+                    ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(4,1000,"alarmmanager","monitoring","/Status","Invalid event class found: " + eventclass, "The event class " + eventclass + "appears in the alarms file but does not exist in zenoss.", "0");
+                    triggeralarm(graphitealarm);
+                    logger.error("Event class " + eventclass + " not found in zenoss. Alarms may not produce the correct severity.");
+
+                } else {
+                    logger.info("success");
+                }
+            }
+
+            logger.info("Total number of alarms processed: " + AlarmsMap.size());
+            logger.debug(ShowAllAlarms());
+
+
+            readstatefromfile();
+
+            Iterator it = CurrentAlarms.keySet().iterator();
+
+            while (it.hasNext()){
+                String id = (String)it.next();
+                Integer intkey = Integer.parseInt(id.split("_")[0]);
+                if (!AlarmsMap.containsKey(intkey)){
+                    logger.info("State file contains the following alarm, but it does not appear in the configuration. It will be removed from the state file.");
+                    logger.info(CurrentAlarms.get(id));
+                    it.remove();
+                }
             }
             
         
@@ -193,7 +230,7 @@ public class AlarmManagerState extends TimerTask {
  * an appropriate alarm can be sent to zenoss.
  */
     
-    private void parse_config_json (JSONObject JSONroot) {
+    private void parse_config_json (JSONObject JSONroot) throws Exception {
         JSONObject config = (JSONObject)JSONroot.get("config");
         JSONObject graphiteconf = (JSONObject)config.get("graphite");
         JSONObject zenossconf = (JSONObject)config.get("zenoss");
@@ -207,7 +244,10 @@ public class AlarmManagerState extends TimerTask {
         if ((String)config.get("statefile") != null) statefilename=(String)config.get("statefile");
         statefile = new File(statefilename);
         
-       
+        alarms_dir=(String)config.get("alarms_dir");
+        if (alarms_dir == null || alarms_dir.equals("")) throw new Exception("No alarms directory given in config");
+        
+        
         try {
             if (config.get("httpport") != null) httpport = Integer.parseInt(config.get("httpport").toString());
         } catch (NumberFormatException e) {
@@ -227,6 +267,65 @@ public class AlarmManagerState extends TimerTask {
         
         pagerdutyurl = (String)pargerdutyconf.get("url");
         pagerdutykey = (String)pargerdutyconf.get("servicekey");
+    }
+    
+    private void parse_alarms_file (File file) throws Exception {
+        
+        int localalarmcounter = 0;
+        
+        logger.info("Parsing alarms in " + file.getName());
+        JSONParser parser = new JSONParser();
+        JSONObject jsonalarms = (JSONObject)parser.parse(new FileReader(file));
+        JSONArray alarms = (JSONArray)jsonalarms.get("alarms");
+        
+
+        for (int temp = 0; temp < alarms.size(); temp++) {
+            JSONObject thisalarm = (JSONObject)alarms.get(temp);
+            String type = (String)thisalarm.get("type");
+            Alarm tempalarm = new Alarm();
+            try {
+                if (type.equalsIgnoreCase("absolute")) tempalarm = new Absolute_Alarm(thisalarm);          
+                else if (type.equalsIgnoreCase("ROC percent")) tempalarm = new ROC_pc_Alarm(thisalarm);
+                else if (type.equalsIgnoreCase("ROC absolute") || type.equalsIgnoreCase("ROC")) tempalarm = new ROC_abs_Alarm(thisalarm);  
+                else if (type.equalsIgnoreCase("baseline")) tempalarm = new Baseline_Alarm(thisalarm);
+                else if (type.equalsIgnoreCase("holt winters")) tempalarm = new HoltWinters_Alarm(thisalarm);
+                else {logger.error("unrecognised type " + type);}
+                
+                /*
+                 * Each alarm is stored against its ID which is a unique hash of various values. This hash is included in the outgoing
+                 * request to graphite, and is then returned with the results to match it with the alarm that has to process it.
+                 * The alarm object creates its own ID hash, its own part of the search query, and analysis of its own result set.
+                 */
+
+                /*
+                 * In order to minimise load on graphite the data for many alarms is retrieved at once by creating a large query URI
+                 * with multiple search terms. However graphite will return a 414 error if the URI is larger thatn 16000 characters.
+                 * The graphiteinterface class expands the URI slightly by converting some special characters to hex codes, so we limit here to 
+                 * 12000. If adding the latest alarm will make the query larger than 12000 characters then the current string is stored in the
+                 * "graphitequeries" list and a new graphitequery string is started.
+                 */
+                
+                if (tempalarm.active){
+                    AlarmsMap.put(tempalarm.ID,tempalarm);
+                    localalarmcounter++;
+                    if (!tempalarm.event_class.equals("/Status")) EventClasses.add(tempalarm.event_class);
+                    if ((graphitequery.length() + tempalarm.searchquery.length()) > 5000) {
+                        graphitequeries.add(graphitequery);
+                        graphitequery = "";
+                    }
+                    graphitequery = graphitequery+tempalarm.searchquery; 
+                                      
+
+                }
+                
+            }
+            catch (Exception e) {
+                logger.error("failed to process alarm on \"" + thisalarm.get("path") + "\"", e);
+            }
+         }
+        graphitequeries.add(graphitequery);  
+        
+        logger.info("Finished processing " + file.getName() + ". " + localalarmcounter + " alarms processed.");
     }
     
      /*
@@ -320,105 +419,9 @@ public class AlarmManagerState extends TimerTask {
             }
         }
         
-    
-
+   
     }
     
-    private void parse_json (JSONObject JSONroot){
-        JSONObject config = (JSONObject)JSONroot.get("config");
-        JSONObject graphiteconf = (JSONObject)config.get("graphite");
-        JSONObject zenossconf = (JSONObject)config.get("zenoss");
-        JSONArray alarms = (JSONArray)JSONroot.get("alarms");
-        
-        
-        /* The alarm manager needs to know the current state of alarms to function properly. They are held in memory but also saved to
-         * a file. This section loads them from that file on startup so that it does not loose track of alarms on restart.
-         */
-        String statefilename = "~/.graphitezenossstate";
-        if ((String)config.get("statefile") != null) statefilename=(String)config.get("statefile");
-        statefile = new File(statefilename);
-        
-       
-        try {
-            if (config.get("httpport") != null) httpport = Integer.parseInt(config.get("httpport").toString());
-        } catch (NumberFormatException e) {
-            logger.error("Cannot parse HTTP port value, HTTP API will not be enabled.");
-        }
-        
-        graphite_address = (String)graphiteconf.get("address");
-        graphite_port = Integer.parseInt(graphiteconf.get("port").toString());
-        graphite_username = (String)graphiteconf.get("username");
-        graphite_password = (String)graphiteconf.get("password");
-
-        
-        zenoss_address = (String)zenossconf.get("address");
-        zenoss_port = Integer.parseInt(zenossconf.get("port").toString());
-        zenoss_username = (String)zenossconf.get("username");
-        zenoss_password = (String)zenossconf.get("password");
-
-
-        for (int temp = 0; temp < alarms.size(); temp++) {
-            JSONObject thisalarm = (JSONObject)alarms.get(temp);
-            String type = (String)thisalarm.get("type");
-            Alarm tempalarm = new Alarm();
-            try {
-                if (type.equalsIgnoreCase("absolute")) tempalarm = new Absolute_Alarm(thisalarm);          
-                else if (type.equalsIgnoreCase("ROC percent")) tempalarm = new ROC_pc_Alarm(thisalarm);
-                else if (type.equalsIgnoreCase("ROC absolute") || type.equalsIgnoreCase("ROC")) tempalarm = new ROC_abs_Alarm(thisalarm);  
-                else if (type.equalsIgnoreCase("baseline")) tempalarm = new Baseline_Alarm(thisalarm);
-                else if (type.equalsIgnoreCase("holt winters")) tempalarm = new HoltWinters_Alarm(thisalarm);
-                else {logger.error("unrecognised type " + type);}
-                
-                /*
-                 * Each alarm is stored against its ID which is a unique hash of various values. This hash is included in the outgoing
-                 * request to graphite, and is then returned with the results to match it with the alarm that has to process it.
-                 * The alarm object creates its own ID hash, its own part of the search query, and analysis of its own result set.
-                 */
-
-                /*
-                 * In order to minimise load on graphite the data for many alarms is retrieved at once by creating a large query URI
-                 * with multiple search terms. However graphite will return a 414 error if the URI is larger thatn 16000 characters.
-                 * The graphiteinterface class expands the URI slightly by converting some special characters to hex codes, so we limit here to 
-                 * 12000. If adding the latest alarm will make the query larger than 12000 characters then the current string is stored in the
-                 * "graphitequeries" list and a new graphitequery string is started.
-                 */
-                
-                if (tempalarm.active){
-                    AlarmsMap.put(tempalarm.ID,tempalarm);
-                    if ((graphitequery.length() + tempalarm.searchquery.length()) > 5000) {
-                        graphitequeries.add(graphitequery);
-                        graphitequery = "";
-                    }
-                    graphitequery = graphitequery+tempalarm.searchquery; 
-                                      
-
-                }
-                
-            }
-            catch (Exception e) {
-                logger.error("failed to process alarm on \"" + thisalarm.get("path") + "\"", e);
-            }
-         }
-        graphitequeries.add(graphitequery);
-        
-        logger.info("Number of alarms processed: " + AlarmsMap.size());
-        
-        logger.debug("=== ALARMS IN STATE FILE ===");
-        
-        logger.debug(ShowAllAlarms());
-        readstatefromfile();
-        
-        
-        for (String id:CurrentAlarms.keySet()){
-            Integer intkey = Integer.parseInt(id.split("_")[0]);
-            if (!AlarmsMap.containsKey(intkey)){
-                logger.info("State file contains the following alarm, but it does not appear in the configuration. It will be removed from the state file.");
-                logger.info(CurrentAlarms.get(id));
-            }
-        }
-    
-
-    }
     
     /*
      * checkalarms performs the graphite check then parses over all of the incoming results.

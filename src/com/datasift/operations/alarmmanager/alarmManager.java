@@ -28,7 +28,6 @@ public class alarmManager {
 
         logger.info("AlarmManager started");
         String configfile="";
-        String alarmsfile="";
         Boolean once = false;
         int interval = 60000;
         boolean testmode = false;
@@ -47,10 +46,6 @@ public class alarmManager {
             if (args[i].equals("-c")) {
                 i++;
                 configfile = args[i];
-                i++;
-            } else if (args[i].equals("-a")) {
-                i++;
-                alarmsfile = args[i];
                 i++;
             } else if (args[i].equals("--once")) {
                 once = true;
@@ -74,12 +69,8 @@ public class alarmManager {
           logger.error("Configuration file not found. Please run with argument \"-c [config filename]\""); 
           return;}
         
-        if ( alarmsfile.equals("") )
-        {  
-          logger.error("Alarms file not found. Please run with argument \"-a [alarm json filename]\""); 
-          return;}
         
-        try { state = new AlarmManagerState(configfile, alarmsfile, testmode); }
+        try { state = new AlarmManagerState(configfile, testmode); }
         catch (java.io.FileNotFoundException e) { logger.error("Cannot find config file, please specify");
                                 return;}
         catch (Exception e) {
