@@ -1,0 +1,34 @@
+{
+"alarms": [
+    {
+        "active": true,
+        "name": "Read events average",
+        "path": "average(devices.servers.*.reader.events_processed)",
+        "type": "absolute",
+        "component": "graphite",
+        "event_class": "/Status",
+        "summary": "Average number of reader events processed",
+        "description": "The average number of events processed by the reader module across all servers",
+        "wiki_link": "https://jiradatasift.atlassian.net/wiki/",
+        "trigger_increments": 10,
+        "clear_increments": 5,
+        "clear": 10000,
+        "severity3": 8000,
+        "severity4": 5000,
+        "threshold_type": "min"
+    },
+    {
+        "active": true,
+        "name": "Growth of space used by mysql database on db1",
+        "path": "services.mysql.db1.space_used",
+        "type": "ROC absolute",
+        "component": "graphite",
+        "event_class": "/Status",
+        "trigger_increments": 5,
+        "clear_increments": 5,
+        "window": 30,
+        "severity3": 100,
+        "threshold_type": "max"
+    }
+]
+}

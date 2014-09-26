@@ -1,0 +1,23 @@
+{
+        "config": {
+                "graphite": {
+                        "address": "https://my-graphite-service.com",
+                        "port": 443,
+                        "username": "foo",
+                        "password": "bar"
+                },
+                "zenoss": {
+                        "address": "https://my-zenoss-service.net",
+                        "port": "9080",
+                        "username": "foo",
+                        "password": "bar"
+                },
+                "pagerduty": {
+                        "url": "https://events.pagerduty.com/generic/2010-04-15/create_event.json",
+                        "servicekey": "12121212121212121212121212"
+                },
+                "statefile": "/etc/graphitealarmmanager/.graphitealarmmanagerstate",
+                "httpport": 8080,
+                "alarms_dir": "/etc/graphitealarmmanager/alarms.d"
+        }
+}
