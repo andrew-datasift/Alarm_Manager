@@ -194,7 +194,7 @@ public class AlarmManagerState extends TimerTask {
             for (String eventclass:EventClasses){
                 logger.info("Checking zenoss for event class " + eventclass);
                 if (!zenoss.checkEventClass(eventclass)){
-                    ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(4,1000,"alarmmanager","monitoring","/Status","Invalid event class found: " + eventclass, "The event class " + eventclass + "appears in the alarms file but does not exist in zenoss.", "0");
+                    ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(4,1000,"graphite","monitoring","/Status","Invalid event class found: " + eventclass, "The event class " + eventclass + "appears in the alarms file but does not exist in zenoss.", "0");
                     triggeralarm(graphitealarm);
                     logger.error("Event class " + eventclass + " not found in zenoss. Alarms may not produce the correct severity.");
 
