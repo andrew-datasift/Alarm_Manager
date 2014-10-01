@@ -360,10 +360,15 @@ public class AlarmManagerState extends TimerTask {
             Map.Entry pairs = (Map.Entry)it.next();
             
             if ( ((Date)pairs.getValue()).before(new Date()) ) {
-                AlarmsMap.get((Integer)pairs.getKey()).set_offset(0.0);
-                logger.info("resetting threshold for alarm " + pairs.getKey());
-                IncreasedThresholdValues.remove((Integer)pairs.getKey());
-                it.remove();
+                try {
+                    AlarmsMap.get((Integer)pairs.getKey()).set_offset(0.0);
+                    logger.info("resetting threshold for alarm " + pairs.getKey());
+                    IncreasedThresholdValues.remove((Integer)pairs.getKey());
+                    it.remove();
+                } catch (NullPointerException e) {
+                    logger.warn("An alarm offset is present in the stored state file but the alarm does not exist. Removing offset");
+                    IncreasedThresholdValues.remove((Integer)pairs.getKey());
+                }
             }
 
         }
@@ -625,14 +630,14 @@ public class AlarmManagerState extends TimerTask {
     }
     
     
-    public synchronized String IncreaseThreshold(int AlarmID, Double multiplier, int minutes){
+    public synchronized String IncreaseThreshold(int AlarmID, Double offset, int minutes){
         String response;
         try {
-            AlarmsMap.get(AlarmID).set_offset(multiplier);
+            AlarmsMap.get(AlarmID).set_offset(offset);
             Date expiry = new Date(new Date().getTime() + (minutes * 60000));
             IncreasedThresholds.put(AlarmID, expiry);
-            IncreasedThresholdValues.put(AlarmID, multiplier);
-            response = "{\"success\": true, \"response\": \"Offset for alarm " + AlarmID + " set to " + multiplier + " for " + minutes + " minutes.\"}";
+            IncreasedThresholdValues.put(AlarmID, offset);
+            response = "{\"success\": true, \"response\": \"Offset for alarm " + AlarmID + " set to " + offset + " for " + minutes + " minutes.\"}";
         } catch (NullPointerException e) {
             response = "{\"success\": false, \"response\": \"Offset setting for alarm " + AlarmID + ". Alarm not found\"}";
             logger.error(response);

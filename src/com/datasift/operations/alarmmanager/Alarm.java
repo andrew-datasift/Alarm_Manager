@@ -283,18 +283,28 @@ public class Alarm {
      */
     
     public Double[] getthresholdsfortime(JSONArray datapoints){
-
+        Double[] currentthresholds = thresholds.clone();
         Long lasttimestamp = (Long)((JSONArray)datapoints.get(datapoints.size()-1)).get(1);
         boolean timespecific = false;
         int i = 0;
         for (AlarmTime at:timesList){
             if (at.checktime(lasttimestamp * 1000)) {
-                return ((AlarmTime)timesList.get(i)).thresholds;
+                currentthresholds = ((AlarmTime)timesList.get(i)).thresholds;
+                break;
             }
             i++;
         }
 
-        return thresholds;
+        // If the threshold offset is not zero then add it to each threshold level except the clear threshold
+        
+        if (threshold_offset != 0.0) {
+            for (int x=0; x<(currentthresholds.length); x++) {
+                if (currentthresholds[x] != null) {
+                    currentthresholds[x] = currentthresholds[x] + threshold_offset;
+                }
+            }
+        }
+        return currentthresholds;
         
     }
     

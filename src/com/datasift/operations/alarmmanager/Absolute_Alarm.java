@@ -47,6 +47,8 @@ public class Absolute_Alarm extends Alarm{
             return zap;
         }
         
+        logger.info("clear threshold = " + localthresholds[0]);
+        
         // Alarms are most likely to be clear, so check for a clear alarm first
         for (int i=2; i<=(clearincrements+1); i++){
             JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
@@ -116,7 +118,7 @@ public class Absolute_Alarm extends Alarm{
         
 
         if (zap.severity == -1) return zap;
-        zap.summary = zap.summary + " " +  String.format("%.0f", latestmeasurement) + " / " + String.format("%.0f", getthresholdsfortime(datapoints)[zap.severity]);
+        zap.summary = zap.summary + " " +  String.format("%.0f", latestmeasurement) + " / " + String.format("%.0f", localthresholds[zap.severity]);
         return zap;
     }
 
