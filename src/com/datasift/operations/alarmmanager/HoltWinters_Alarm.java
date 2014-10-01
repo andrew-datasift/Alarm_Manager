@@ -3,7 +3,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
 /**
  * This alarm checks that a graphite data set does not sit outside the values predicted by a HoltWinters prediction.
- * HoltWinters is a mathmatical model which predicts values based on history with older values having decreasing relevence over time.
+ * HoltWinters is a mathematical model which predicts values based on history with older values having decreasing relevence over time.
  * Graphite can produce a holt winters prediction for the current time based on old values, along with "confidence bands", if the current value
  * lies outside those bands it means the value is not in line with the trend and may consitiute a problem.
  */
@@ -20,7 +20,7 @@ public class HoltWinters_Alarm extends Alarm {
         }
     }
     
-        @Override
+    
     public ZenossAlarmProperties processresponse(JSONObject dataset){
         String uniquecomponent = getcomponent((String)dataset.get("target"));
         String uniqueID = ID.toString() + "_" + uniquecomponent;

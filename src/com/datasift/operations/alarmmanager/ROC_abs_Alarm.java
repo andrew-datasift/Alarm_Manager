@@ -30,49 +30,7 @@ public class ROC_abs_Alarm extends Alarm {
         else summary = summary + " rate of change in " + window + " minutes is " + comparison + " threshold: ";
     }
     
-     /*
-     * processresponse takes a dataset from graphite (as returned by the graphite JSON REST interface).
-     * returns a ZenossAlarmProperties object which contains all the information ZenossInterface needs to raise or clear an alarm.
-     */
-    
-    @Override
-    public ZenossAlarmProperties processresponse(JSONObject dataset){
-        String uniquecomponent = getcomponent((String)dataset.get("target"));
-        String uniqueID = ID.toString() + "_" + uniquecomponent;
-        ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,"Graphite",uniquecomponent,event_class,summary,uniqueID);
-        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
-        if (datapoints.size() == 0) return zap;
 
-        
-        //Work backwards through values to find max and min
-        Double max = null;
-        Double min = null;
-        Long now = (new Date()).getTime() / 1000;
-        
-        //We discard the most recent value for ROC alarms because, in graphite, the most recent value often cannot be trusted. It could
-        //be zero showing a change where none existsm, or in a sumSeries it could be between zero and the true value.
-        
-        for (int i=(datapoints.size()-2); i>=0; i--){
-            JSONArray currentdatapoint = (JSONArray)datapoints.get(i);
-            Long lasttimestamp = (Long)currentdatapoint.get(1);
-            if (lasttimestamp < now - (window * 60)) break;
-            if (currentdatapoint.get(0) != null){
-                Double currentvalue = new Double(currentdatapoint.get(0).toString());
-                if (max == null || currentvalue > max) max = currentvalue;
-                if (min == null || currentvalue < min) min = currentvalue;
-            }
-        }
-        
-        
-        if (max == null || min == null) return zap;
-        Double roc = max - min;
-        zap.severity=getcurrentseveritylevel(datapoints, roc);
-        if (zap.severity == -1) return zap;
-        zap.summary = zap.summary + " " +  String.format("%.0f", roc) + " / " + String.format("%.0f", getthresholdsfortime(datapoints)[zap.severity]);
-        // zap.summary = zap.summary + latestmeasurement + " / " + getthresholdsfortime(datapoints)[zap.severity];
-        
-        return zap;
-    }
     
     @Override
     public ZenossAlarmProperties processalarm(JSONObject dataset){

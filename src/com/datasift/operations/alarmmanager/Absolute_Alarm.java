@@ -24,39 +24,7 @@ public class Absolute_Alarm extends Alarm{
      * returns a ZenossAlarmProperties object which contains all the information ZenossInterface needs to raise or clear an alarm.
      */
     
-    @Override
-    public ZenossAlarmProperties processresponse(JSONObject dataset){
-        String uniquecomponent = getcomponent((String)dataset.get("target"));
-        String uniqueID = ID.toString() + "_" + uniquecomponent;
-        ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,"Graphite",uniquecomponent,event_class,summary,uniqueID);
-        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
 
-        
-        /*
-         * The latest datapoint is often null as not all graphite inputs report at the same time.
-         * Thus we work back through the dataset. If the set contains only null values the alarmmanager should generate an error
-         * before this point, so we handle that case by returning a clear value.
-         */
-        
-        Double latestmeasurement = null;
-        for (int i=2; i<datapoints.size(); i++){
-            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
-            if (currentdatapoint.get(0) != null){
-                latestmeasurement = new Double(currentdatapoint.get(0).toString());
-                break;
-            }
-        }
-
-        if (latestmeasurement == null) return zap;
-        
-        zap.severity=getcurrentseveritylevel(datapoints, latestmeasurement);
-        
-
-        if (zap.severity == -1) return zap;
-        zap.summary = zap.summary + " " +  String.format("%.0f", latestmeasurement) + " / " + String.format("%.0f", getthresholdsfortime(datapoints)[zap.severity]);
-        return zap;
-    }
-    
     @Override
     public ZenossAlarmProperties processalarm(JSONObject dataset){
         String uniquecomponent = getcomponent((String)dataset.get("target"));
@@ -124,11 +92,6 @@ public class Absolute_Alarm extends Alarm{
                             logger.debug("Severity is not breached");
                             break;
                         }
-                    }
-                    else {
-                        breached = false;
-                        logger.debug("Severity is not breached");
-                        break;
                     }
 
                 }

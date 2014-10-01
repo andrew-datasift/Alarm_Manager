@@ -233,37 +233,14 @@ public class Alarm {
 
     }
     
-    /*
-     * processresponse takes a dataset from graphite (as returned by the graphite JSON REST interface).
-     * returns a ZenossAlarmProperties object which contains all the information ZenossInterface needs to raise or clear an alarm.
-     * This method always returns a clear (level 0), and should not be used. It is overridden in each of the child classes.
-     */
-    
-    
-    public ZenossAlarmProperties processresponse(JSONObject dataset){
-        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
-        return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID.toString());
-    }
+
     
     public ZenossAlarmProperties processalarm(JSONObject dataset){
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
         return new ZenossAlarmProperties(0, prodState, "", "", "", "",ID.toString());
     }
     
-    /*
-     * checkalarm is a wrapper method. This will be called in order to generate an alarm from a set of graphite data.
-     * This method will then perform any standard functions, such as checking the validity of the dataset, then call the
-     * processresponse method which will be unique for each alarm instance.
-     * 
-     */
-    
-    public ZenossAlarmProperties checkalarm(JSONObject dataset){
-     
-        String uniquecomponent = getcomponent((String)dataset.get("target"));
-        String uniqueID = ID.toString() + "_" + uniquecomponent;
-        if (checkfornodata(dataset)) return new ZenossAlarmProperties(3,prodState,"Graphite",uniquecomponent,event_class,summary + " returned too many none values",uniqueID.toString());
-        return processresponse(dataset);
-    }
+
 
     /*
      * getcurrentseveritylevel is given a set of datapoints as returned by graphite. It returns the current alarm threshold for that
@@ -365,26 +342,6 @@ public class Alarm {
       return "";  
     }
   
-    /*
-     * checkfornodata will return true if the first 10 values in the dataset are empty. If they are
-     * then the alarm manager will trigger a missing data alarm to notify that the data is missing from graphite
-     */
-    public Boolean checkfornodata(JSONObject dataset){
-        JSONArray datapoints = (JSONArray)dataset.get("datapoints");
-        if (datapoints.size() == 0) return true;
-        
-        // If the dataset itself is smaller than 6 then use that
-
-        
-        for (int i=1; i<6; i++){
-            if (i > datapoints.size()) break;
-            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
-            if (currentdatapoint.get(0) != null){
-                return false;
-            }
-        }
-        return true;
-    }
     
     
     
