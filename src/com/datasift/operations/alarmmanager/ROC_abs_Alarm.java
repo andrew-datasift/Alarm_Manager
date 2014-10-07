@@ -38,6 +38,7 @@ public class ROC_abs_Alarm extends Alarm {
         //String uniqueID = ID.toString() + "_" + uniquecomponent;
         String target = (String)dataset.get("target");
         ZenossAlarmProperties zap = new ZenossAlarmProperties(0,prodState,"Graphite",uniquecomponent,event_class,summary,target);
+        zap.sourcealarmID = this.ID;
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
         if (datapoints.size() == 0) return zap;
 

@@ -30,13 +30,41 @@ public class HTTPapi  extends AbstractHandler implements Runnable {
                        HttpServletResponse response) 
         throws IOException, ServletException
     {
+        
         response.setContentType("text/html;charset=utf-8");
         response.setStatus(HttpServletResponse.SC_OK);
         baseRequest.setHandled(true);
-        if (request.getMethod().equals("GET")) response.getWriter().println(handleGET(request));
-        else if (request.getMethod().equals("POST")) response.getWriter().println(handlePOST(request));
-        else response.getWriter().println("Request not recognised"); 
+        
+        try {
+            if (baseRequest.getRequestURI().startsWith("/alarmmanager")) response.getWriter().println(handleHTML(baseRequest));
+            else if (request.getMethod().equals("GET")) response.getWriter().println(handleGET(request));
+            else if (request.getMethod().equals("POST")) response.getWriter().println(handlePOST(request));
+            else response.getWriter().println("Request not recognised"); 
+        } catch (Exception e) {
+            logger.error("Exception processing request to HTTP api", e);
+        }
 
+    }
+    
+    private String handleHTML(Request baseRequest) throws IOException {
+        String path = baseRequest.getRequestURI();
+        HTMLGenerator index = new HTMLGenerator(ams);
+        if (baseRequest.getParameter("OFFSET") != null) {
+            String offset = (baseRequest.getParameter("OFFSET"));
+            String time = (baseRequest.getParameter("TIME"));
+            String alarmid = (baseRequest.getParameter("ALARMID"));
+            try {
+                handleOffsetUpdate(alarmid, offset, time);
+            } catch (Exception e) {
+                logger.error("Error processing offset request via HTML interface", e);
+            }
+            
+            return index.getAlarm(baseRequest.getParameter("ALARMID"));
+        }
+
+        if (  path.startsWith("/alarmmanager/alarm/") ) return index.getAlarm(path.substring(path.lastIndexOf('/') + 1));
+        
+        else return index.getIndex();
     }
     
     private String handleGET(HttpServletRequest request){
@@ -53,6 +81,21 @@ public class HTTPapi  extends AbstractHandler implements Runnable {
         if (query[0] != null && query[0].equalsIgnoreCase("set_offset")) output = handleOffsetUpdate(query);
         else output = "Unsupported POST message";
         return output;
+    }
+    
+    private void handleOffsetUpdate(String _alarmid, String _offset, String _minutes) {
+        Double offset = null;
+        Integer minutes = null;
+        Integer alarm = null;
+        try {
+            offset = Double.parseDouble(_offset);
+            minutes = Integer.parseInt(_minutes);
+            alarm = Integer.parseInt(_alarmid);
+        } catch (NumberFormatException e) {
+            logger.error("Error setting alarm ID, unable to parse input", e);
+        }
+        ams.IncreaseThreshold(alarm, offset, minutes);
+        
     }
     
     private String handleOffsetUpdate(String[] query){

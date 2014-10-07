@@ -14,6 +14,7 @@ public class ZenossAlarmProperties implements java.io.Serializable {
     public String ID;
     public String message;
     public Double threshold;
+    public Integer sourcealarmID = 0;
     
     // nodataalarm is a flag that this alarm is for graphite not returning data for this metric. This is used by AlarmManagerState to keep track
     // of such alarms so they can be cleared when data appears.
