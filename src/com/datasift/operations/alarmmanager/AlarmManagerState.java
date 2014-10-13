@@ -632,12 +632,22 @@ public class AlarmManagerState extends TimerTask {
     
     public synchronized String IncreaseThreshold(int AlarmID, Double offset, int minutes){
         String response;
+        
+      
         try {
             AlarmsMap.get(AlarmID).set_offset(offset);
-            Date expiry = new Date(new Date().getTime() + (minutes * 60000));
-            IncreasedThresholds.put(AlarmID, expiry);
-            IncreasedThresholdValues.put(AlarmID, offset);
-            response = "{\"success\": true, \"response\": \"Offset for alarm " + AlarmID + " set to " + offset + " for " + minutes + " minutes.\"}";
+            
+            if (offset == 0.0) {
+                if (IncreasedThresholds.containsKey(AlarmID)) IncreasedThresholds.remove(AlarmID);
+                if (IncreasedThresholdValues.containsKey(AlarmID)) IncreasedThresholdValues.remove(AlarmID);
+                                response = "{\"success\": true, \"response\": \"Offset for alarm " + AlarmID + " cleared\"}";
+            } else {
+                Date expiry = new Date(new Date().getTime() + (minutes * 60000));
+                IncreasedThresholds.put(AlarmID, expiry);
+                IncreasedThresholdValues.put(AlarmID, offset);
+                response = "{\"success\": true, \"response\": \"Offset for alarm " + AlarmID + " set to " + offset + " for " + minutes + " minutes.\"}";
+            }
+
         } catch (NullPointerException e) {
             response = "{\"success\": false, \"response\": \"Offset setting for alarm " + AlarmID + ". Alarm not found\"}";
             logger.error(response);
