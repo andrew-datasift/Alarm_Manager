@@ -73,12 +73,34 @@ public class Absolute_Alarm extends Alarm{
         if (clear) logger.info("alarm is clear");
         if (clear) return zap;
         
+        /* Find the latest measurement that is not null. We already check before this point that there are not 
+         * too many null values to process the alert (before the processalarm method is called),
+         * so there will be valid data in the set. This is to make sure that when an alarm is triggered it is based
+         * on at least one real numerical value that has breached the threshold.
+         * Start at 2 to disregard the latest value. This is because a lot of our stats are counters and the most recent value
+         * might be incomplete, so including it causes lots of false alarms.
+         */
+        
+        int validdataindex = 0;
+        Double latestmeasurement = null;
+        
+        for (int i=2; i<datapoints.size(); i++){
+            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
+            if (currentdatapoint.get(0) != null){
+                latestmeasurement = new Double(currentdatapoint.get(0).toString());
+                validdataindex = i;
+                break;
+            }
+        }
+        
+        
         boolean breached;
         Integer severity = -1;
         
         /* 
          * Step through all of the severities in turn to see if all the values within the increments window are above that severity.
          * If they are then move the severity to that level and check the next. If they are not then stop.
+         * For each severity start with the most recent non-null value to make sure alerts are always based on valid numbers.
          */
         
         for (int i=1; i<=5; i++){
@@ -86,7 +108,7 @@ public class Absolute_Alarm extends Alarm{
                 Double threshold = localthresholds[localthresholds.length-i];
                 logger.debug("Checking severity " + (localthresholds.length-i) + " = " + threshold);
                 breached = true;
-                for (int x=2; x<=(triggerincrements+1); x++){
+                for (int x=validdataindex; x<(triggerincrements+validdataindex); x++){
                     JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-x);
                     if (currentdatapoint.get(0) != null){
                         Double currentvalue = new Double(currentdatapoint.get(0).toString());
@@ -95,6 +117,7 @@ public class Absolute_Alarm extends Alarm{
                             logger.debug("Severity is not breached");
                             break;
                         }
+                        
                     }
 
                 }
@@ -106,14 +129,7 @@ public class Absolute_Alarm extends Alarm{
 
         }
         
-        Double latestmeasurement = null;
-        for (int i=2; i<datapoints.size(); i++){
-            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
-            if (currentdatapoint.get(0) != null){
-                latestmeasurement = new Double(currentdatapoint.get(0).toString());
-                break;
-            }
-        }
+
         
         zap.severity=severity;
         

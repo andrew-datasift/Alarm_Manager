@@ -319,7 +319,12 @@ public class AlarmManagerState extends TimerTask {
                 logger.error("failed to process alarm on \"" + thisalarm.get("path") + "\"", e);
             }
          }
-        graphitequeries.add(graphitequery);  
+        
+        /* Add the current graphite query to the array of queries to send. By doing this here the queries sent to graphite should
+         * roughly match the alarms files in the config directory, which should make reading the log a little easier.
+         */
+        graphitequeries.add(graphitequery);
+        graphitequery = "";
         
         logger.info("Finished processing " + file.getName() + ". " + localalarmcounter + " alarms processed.");
     }
@@ -431,6 +436,7 @@ public class AlarmManagerState extends TimerTask {
                 if (currentalarm.substitute_component) graphURL = "https://graphite.sysms.net/render/?target=" + ((String)dataset.get("target")).split("_", 2)[1] + "&height=300&width=500&from=-2hours";
                 else graphURL = "https://graphite.sysms.net/render/?target=" + currentalarm.path + "&height=300&width=500&from=-2hours";
                 ZenossAlarmProperties nodataalarm = new ZenossAlarmProperties(currentalarm.nodataseverity,currentalarm.prodState,"Graphite",currentalarm.getcomponent(target),currentalarm.event_class,currentalarm.name + " returned too many \'none\' values: " + nonecount,target, true);
+                nodataalarm.sourcealarmID=alarmID;
                 nodataalarm.message=nodataalarm.message + " <img src='" + graphURL + "' />";
                 nodataalarm.message=nodataalarm.message + "\r\n<br /><a href='" + graphURL + "' target='_blank'>" + graphURL + "</a>";
                 nodataalarm.message=nodataalarm.message + linkmessage;
