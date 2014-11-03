@@ -124,7 +124,7 @@ public class AlarmManagerState extends TimerTask {
         
         try {
             ZenossAlarmProperties heartbeat = new ZenossAlarmProperties(2,1000,"graphite","monitoring","/Status","GraphiteAlarmManager heartbeat", "GraphiteAlarmManager heartbeat");
-            zenoss.createEvent(heartbeat);
+            triggeralarm(heartbeat);
         } catch (Exception e) {
             logger.error("Problem sending heartbeat to zenoss");
             sendpageralert = true;
@@ -166,7 +166,20 @@ public class AlarmManagerState extends TimerTask {
             
             // the zenoss object holds all details for connecting to zenoss
             // and also handles all requests to the zenoss REST API
-            zenoss = new ZenossInterface(zenoss_address, zenoss_port, zenoss_username, zenoss_password);
+            // ZenossInterface will make a test connection, if it failes it is a fatal error unless testmode
+            // is active, in which case just log the error.
+            
+            try {
+                zenoss = new ZenossInterface(zenoss_address, zenoss_port, zenoss_username, zenoss_password);
+            } catch (Exception e) {
+                if (testmode) { 
+                    logger.warn("Error creating zenoss connection. Continuing as AlarmManager is in test mode.");
+                } else {
+                    throw e;
+                }
+                
+            }
+            
             
             // pagerduty is used to send an alarm to the person on call if we cannot reach zenoss
             pagerduty = new PagerDuty(pagerdutyurl, pagerdutykey);
@@ -186,16 +199,23 @@ public class AlarmManagerState extends TimerTask {
                 }
             }
             
-            
-            for (String eventclass:EventClasses){
-                logger.info("Checking zenoss for event class " + eventclass);
-                if (!zenoss.checkEventClass(eventclass)){
-                    ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(4,1000,"graphite","monitoring","/Status","Invalid event class found in alarmmanager config: " + eventclass, "The event class " + eventclass + "appears in the alarms file but does not exist in zenoss. Alerts on this event class will be limited to info level", "0");
-                    triggeralarm(graphitealarm);
-                    logger.error("Event class " + eventclass + " not found in zenoss. Alarms may not produce the correct severity.");
+            try {
+                for (String eventclass:EventClasses){
+                    logger.info("Checking zenoss for event class " + eventclass);
+                    if (!zenoss.checkEventClass(eventclass)){
+                        ZenossAlarmProperties graphitealarm = new ZenossAlarmProperties(4,1000,"graphite","monitoring","/Status","Invalid event class found in alarmmanager config: " + eventclass, "The event class " + eventclass + "appears in the alarms file but does not exist in zenoss. Alerts on this event class will be limited to info level", "0");
+                        triggeralarm(graphitealarm);
+                        logger.error("Event class " + eventclass + " not found in zenoss. Alarms may not produce the correct severity.");
 
+                    } else {
+                        logger.info("success");
+                    }
+                }
+            } catch (Exception e) {
+                if (testmode) { 
+                    logger.warn("Error checking event classes from zenoss. Running in testmode so continuing");
                 } else {
-                    logger.info("success");
+                    throw e;
                 }
             }
 
@@ -667,9 +687,15 @@ public class AlarmManagerState extends TimerTask {
     public Integer nonevalues(JSONObject dataset){
         JSONArray datapoints = (JSONArray)dataset.get("datapoints");
 
+        /*
+         * Count back from the last value how many entries are null. The method actually starts at the penultimate value.
+         * When calculating alerts the alarm classes disregard the last value as they very often contain incomplete metrics, so
+         * this method must do the same for consistancy.
+         */
+        
         Integer count = 0;
-        while (count<datapoints.size()){
-            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-count-1);
+        while (count<datapoints.size()-1){
+            JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-count-2);
             if (currentdatapoint.get(0) != null) break;
             else count++;
         }
