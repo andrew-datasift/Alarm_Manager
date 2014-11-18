@@ -48,12 +48,12 @@ public class Absolute_Alarm extends Alarm{
             return zap;
         }
         
-        logger.info("clear threshold = " + localthresholds[0]);
+        logger.debug("clear threshold = " + localthresholds[0]);
         
         // Alarms are most likely to be clear, so check for a clear alarm first
         for (int i=2; i<=(clearincrements+1); i++){
             JSONArray currentdatapoint = (JSONArray)datapoints.get(datapoints.size()-i);
-            logger.info(currentdatapoint);
+            logger.debug(currentdatapoint);
             if (currentdatapoint.get(0) != null) {
                 Double currentvalue = new Double(currentdatapoint.get(0).toString());
                 if ( (greater_than && (currentvalue > localthresholds[0])) || (!greater_than && (currentvalue < localthresholds[0])) ) {
@@ -70,8 +70,11 @@ public class Absolute_Alarm extends Alarm{
         }
         
         // if none of the values are above the clear threshold then return with clear severity (-1)
-        if (clear) logger.info("alarm is clear");
-        if (clear) return zap;
+        if (clear) {
+            logger.debug("alarm is clear");
+            if (clear) return zap;
+        }
+        
         
         /* Find the latest measurement that is not null. We already check before this point that there are not 
          * too many null values to process the alert (before the processalarm method is called),

@@ -283,13 +283,16 @@ public class Alarm {
      */
     
     public Double[] getthresholdsfortime(JSONArray datapoints){
-        Double[] currentthresholds = thresholds.clone();
+        
+        Double[] currentthresholds = new Double[thresholds.length];
+        System.arraycopy(thresholds, 0, currentthresholds, 0, 6);
+        
         Long lasttimestamp = (Long)((JSONArray)datapoints.get(datapoints.size()-1)).get(1);
         boolean timespecific = false;
         int i = 0;
         for (AlarmTime at:timesList){
             if (at.checktime(lasttimestamp * 1000)) {
-                currentthresholds = ((AlarmTime)timesList.get(i)).thresholds;
+                System.arraycopy(((AlarmTime)timesList.get(i)).thresholds, 0, currentthresholds, 0, 6);
                 break;
             }
             i++;
@@ -304,7 +307,9 @@ public class Alarm {
                 }
             }
         }
+        
         return currentthresholds;
+        
         
     }
     

@@ -75,7 +75,7 @@ public class alarmManager {
                                 return;}
         catch (Exception e) {
             System.out.println("Cannot start alarmmanager. See log file for details");
-            logger.error("Fatal error starting alarmmanager", e);
+            logger.fatal("Fatal error starting alarmmanager", e);
             return;
         }
 

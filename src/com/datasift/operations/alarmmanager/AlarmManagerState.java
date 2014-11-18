@@ -114,21 +114,24 @@ public class AlarmManagerState extends TimerTask {
         } 
 
         logger.debug("=============Finished processing new metrics.==============");
-        logger.debug("Currently active alarms:");
+        logger.info("Currently active alarms:");
         try {
-            logger.debug(ShowCurrentAlarms());
+            logger.info(ShowCurrentAlarms());
         } catch (Exception e) {
             logger.error("Problem parsing array of current alarms.", e);
         }
         logger.debug("=============Metrics run complete metrics.==============");
         
-        try {
-            ZenossAlarmProperties heartbeat = new ZenossAlarmProperties(2,1000,"graphite","monitoring","/Status","GraphiteAlarmManager heartbeat", "GraphiteAlarmManager heartbeat");
-            triggeralarm(heartbeat);
-        } catch (Exception e) {
-            logger.error("Problem sending heartbeat to zenoss");
-            sendpageralert = true;
+        if (!testmode) {
+            try {
+                ZenossAlarmProperties heartbeat = new ZenossAlarmProperties(2,1000,"graphite","monitoring","/Status","GraphiteAlarmManager heartbeat", "GraphiteAlarmManager heartbeat");
+                zenoss.createEvent(heartbeat);
+            } catch (Exception e) {
+                logger.error("Problem sending heartbeat to zenoss");
+                sendpageralert = true;
+            }
         }
+
         
         if (sendpageralert) {
             try {
@@ -229,6 +232,7 @@ public class AlarmManagerState extends TimerTask {
 
             while (it.hasNext()){
                 String id = (String)it.next();
+                logger.info(id);
                 Integer intkey = Integer.parseInt(id.split("_")[0]);
                 if (!AlarmsMap.containsKey(intkey)){
                     logger.info("State file contains the following alarm, but it does not appear in the configuration. It will be removed from the state file.");
@@ -486,7 +490,7 @@ public class AlarmManagerState extends TimerTask {
                 zap.message=zap.message + linkmessage;
                 int alarmlevel = zap.severity;
                 
-                logger.info(zap.toString());
+                logger.debug(zap.toString());
 
 
                 /* If the level is 0 (clear)then check if an alarm has been triggered. If it has, and enough clear values have
